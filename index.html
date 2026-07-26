@@ -6,7 +6,11 @@
   <title>夢想藍圖</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  
+  <!-- Firebase SDK (v10 Compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   
   <style>
     :root {
@@ -47,10 +51,31 @@
     #loading, #login-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.98); z-index:9999; display:flex; justify-content:center; align-items:center; flex-direction: column;}
     #login-overlay { z-index: 10000; background: var(--bg-light); }
 
+    .btn-google-login {
+        background: #ffffff;
+        color: #757575;
+        border: 1px solid #dadce0;
+        font-weight: 600;
+        padding: 12px 24px;
+        border-radius: 30px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+        transition: background-color 0.2s, box-shadow 0.2s;
+        display: inline-flex;
+        align-items: center;
+        cursor: pointer;
+    }
+    .btn-google-login:hover {
+        background: #f8f9fa;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.12);
+        color: #3c4043;
+    }
+
     /* Footer 樣式 */
     .home-footer { text-align: center; margin-top: 40px; margin-bottom: 20px; padding: 20px; border-top: 1px solid #eee; color: #95a5a6; font-size: 0.9rem; }
     .btn-clear-data { border: 1px solid #fab1a0; color: #e74c3c; background: #fff; padding: 5px 15px; border-radius: 20px; font-size: 0.8rem; margin-left: 10px; transition: all 0.2s; }
     .btn-clear-data:hover { background: #e74c3c; color: white; }
+    .btn-logout { border: 1px solid #bdc3c7; color: #7f8c8d; background: #fff; padding: 5px 15px; border-radius: 20px; font-size: 0.8rem; margin-left: 10px; transition: all 0.2s; }
+    .btn-logout:hover { background: #7f8c8d; color: white; }
 
     @media (min-width: 992px) {
         body { padding-bottom: 0; }
@@ -96,18 +121,20 @@
       <h1 class="fw-bold mb-3" style="color: var(--primary-color); font-size: 2.5rem;"><i class="fa-solid fa-rocket me-3"></i>夢想藍圖</h1>
       <p class="text-secondary lead">請使用 Google 帳號登入以同步資料</p>
     </div>
-    <div id="g_id_onload"
-         data-client_id="588153257798-88o3tpdc6m8545frq4qcsd3ou31cnhgn.apps.googleusercontent.com"
-         data-callback="handleCredentialResponse"
-         data-auto_select="true"
-         data-auto_prompt="false">
-    </div>
-    <div class="g_id_signin" data-type="standard" data-size="large" data-theme="outline" data-text="sign_in_with" data-shape="pill" data-logo_alignment="left"></div>
+    <button class="btn-google-login" onclick="loginWithGoogle()">
+      <svg width="20" height="20" viewBox="0 0 48 48" class="me-2">
+        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.28-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24s.92 7.54 2.56 10.78l7.97-6.19z"/>
+        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+      </svg>
+      使用 Google 帳號登入
+    </button>
   </div>
 
   <div id="loading" style="display:none;">
     <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;" role="status"></div>
-    <div class="text-secondary fw-bold">資料同步中...</div>
+    <div class="text-secondary fw-bold" id="loading-text">資料同步中...</div>
   </div>
 
   <div class="layout-wrapper">
@@ -116,6 +143,10 @@
               <i class="fa-solid fa-rocket me-3 text-primary"></i>夢想藍圖
           </div>
           <div class="sidebar-menu" id="sidebar-menu-container"></div>
+          <div class="mt-auto pt-3 border-top text-center" id="user-info-area" style="display:none;">
+              <small class="text-muted d-block text-truncate mb-2" id="user-email-text"></small>
+              <button class="btn btn-logout w-100 mb-2" onclick="logout()"><i class="fa-solid fa-right-from-bracket me-1"></i>登出帳號</button>
+          </div>
       </nav>
 
       <main class="main-content" id="app-content"></main>
@@ -160,12 +191,39 @@
   // ===========================================
   // 設定區
   // ===========================================
-  const API_URL = "https://script.google.com/macros/s/AKfycbyNxo_-qndGStbxkayF0bW3oKaGLwqFQZEnxfcAVMWU2mgGzv6ypJMsCn7gPZY2HObs-w/exec"; 
-  // ===========================================
+  const firebaseConfig = {
+    apiKey: "AIzaSyDfmAcELvmnoNtMYqaUM072RXAHUGLuB1Y",
+    authDomain: "dreamboard-app-a3b38.firebaseapp.com",
+    projectId: "dreamboard-app-a3b38",
+    storageBucket: "dreamboard-app-a3b38.firebasestorage.app",
+    messagingSenderId: "344657606959",
+    appId: "1:344657606959:web:5f5097df416204999389da",
+    measurementId: "G-72ELQT1DD7"
+  };
 
-  let userToken = localStorage.getItem("google_token");
+  const OLD_API_URL = "https://script.google.com/macros/s/AKfycbyNxo_-qndGStbxkayF0bW3oKaGLwqFQZEnxfcAVMWU2mgGzv6ypJMsCn7gPZY2HObs-w/exec";
+
+  // 初始化 Firebase
+  if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+  }
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+
+  // 預設範例資料 (僅在資料庫完全無資料時初始化)
+  const DEFAULT_ITEMS = [
+    { id: "g1", category: "Home", type: "Goal", content: "成為更具影響力且平衡生活的人" },
+    { id: "g2", category: "Health", type: "Goal", content: "保持規律運動與健康飲食，擁有充沛活力" },
+    { id: "r1", category: "Health", type: "Reminder", content: "每半年定期洗牙檢查", dateValue: new Date().toISOString().slice(0,10), isStarred: true, isDone: false },
+    { id: "t1", category: "Health", type: "Todo", content: "報名每週二次瑜珈課", isStarred: false, isDone: false },
+    { id: "g3", category: "Work", type: "Goal", content: "提升專業技能，完成年度核心專案" },
+    { id: "t2", category: "Work", type: "Todo", content: "閱讀專業書籍一本", isStarred: true, isDone: false }
+  ];
+
+  let currentUser = null;
+  let unsubscribeSnapshot = null;
   let allData = [];
-  let lastUpdateTimestamp = 0; // 新增：儲存最後更新時間
+  let lastUpdateTimestamp = 0;
   let currentCategory = 'Home';
   let editModal;
 
@@ -186,47 +244,147 @@
     document.getElementById('btnSave').onclick = saveEdit;
     document.getElementById('btnDelete').onclick = deleteEdit;
 
-    if (userToken) {
-      document.getElementById('login-overlay').style.display = 'none';
-      loadData();
-    }
+    // 監聽 Firebase Authentication 狀態變更
+    auth.onAuthStateChanged(async (user) => {
+      if (user) {
+        currentUser = user;
+        document.getElementById('login-overlay').style.display = 'none';
+        document.getElementById('user-info-area').style.display = 'block';
+        document.getElementById('user-email-text').innerText = user.email || user.displayName || '已登入';
+        subscribeToUserData(user.uid);
+      } else {
+        currentUser = null;
+        if (unsubscribeSnapshot) unsubscribeSnapshot();
+        document.getElementById('user-info-area').style.display = 'none';
+        document.getElementById('login-overlay').style.display = 'flex';
+        document.getElementById('loading').style.display = 'none';
+      }
+    });
   };
 
-  function handleCredentialResponse(response) {
-    userToken = response.credential;
-    localStorage.setItem("google_token", userToken);
-    document.getElementById('login-overlay').style.display = 'none';
-    loadData();
-  }
-
-  async function callApi(action, payload = {}) {
-    if (!userToken) { document.getElementById('login-overlay').style.display = 'flex'; return null; }
-    try {
-      payload.token = userToken; 
-      let response = await fetch(API_URL, {
-        method: 'POST',
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action: action, ...payload })
-      });
-      const data = await response.json();
-      if (data && data.error === 'Unauthorized') {
-        alert("登入已過期，請重新登入");
-        localStorage.removeItem("google_token"); userToken = null;
-        document.getElementById('login-overlay').style.display = 'flex'; return null;
-      }
-      return data;
-    } catch (error) { console.error(error); alert('無法連線到伺服器'); document.getElementById('loading').style.display = 'none'; return null; }
-  }
-
-  async function loadData() {
+  // Google 登入
+  function loginWithGoogle() {
+    const provider = new firebase.auth.GoogleAuthProvider();
     document.getElementById('loading').style.display = 'flex';
-    const res = await callApi('getData');
-    if (res) { 
-        allData = res.items || []; 
-        lastUpdateTimestamp = res.lastUpdated || new Date().getTime(); // 儲存時間
-        renderContent(); 
+    document.getElementById('loading-text').innerText = "登入驗證中...";
+    auth.signInWithPopup(provider).then(async (result) => {
+      if (result && result.credential && result.credential.idToken) {
+        localStorage.setItem("google_token", result.credential.idToken);
+      }
+    }).catch(error => {
+      console.error("Google 登入失敗:", error);
+      alert("登入失敗: " + error.message);
+      document.getElementById('loading').style.display = 'none';
+    });
+  }
+
+  // 登出帳號
+  function logout() {
+    if (confirm("確定要登出帳號嗎？")) {
+      auth.signOut();
     }
+  }
+
+  // 取得 Firestore 使用者文件參照
+  function getUserDocRef(uid) {
+    return db.collection('users').doc(uid);
+  }
+
+  // 從舊版 (Google Apps Script) 遷移資料
+  async function migrateFromOldApi(uid, token, force = false) {
+    try {
+      const docRef = getUserDocRef(uid);
+      const docSnap = await docRef.get();
+      // 若文件不存在或強制進行匯入
+      if (!docSnap.exists || force) {
+        let response = await fetch(OLD_API_URL, {
+          method: 'POST',
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({ action: 'getData', token: token })
+        });
+        const data = await response.json();
+        if (data && data.items && data.items.length > 0) {
+          allData = data.items;
+          lastUpdateTimestamp = data.lastUpdated || Date.now();
+          await docRef.set({ items: allData, lastUpdated: lastUpdateTimestamp });
+          return true;
+        }
+      }
+    } catch (err) {
+      console.warn("無法自動匯入舊版資料:", err);
+    }
+    return false;
+  }
+
+  // 手動一鍵匯入舊版資料
+  async function importOldDataManually() {
+    const token = localStorage.getItem("google_token");
+    if (!token) {
+      alert("請登入 Google 帳號後再進行匯入。");
+      return;
+    }
+    if (!confirm("確定要從舊版 (Google Apps Script API) 載入舊資料並備份儲存至 Firebase 嗎？")) return;
+
+    document.getElementById('loading').style.display = 'flex';
+    document.getElementById('loading-text').innerText = "從舊版資料庫匯入中...";
+    const success = await migrateFromOldApi(currentUser.uid, token, true);
     document.getElementById('loading').style.display = 'none';
+    if (success) {
+      alert("成功將舊版資料匯入至 Firebase！");
+    } else {
+      alert("嘗試讀取舊版資料失敗，請確認登入權限或舊版是否有資料。");
+    }
+  }
+
+  // 訂閱 Firestore 即時資料變動
+  function subscribeToUserData(uid) {
+    document.getElementById('loading').style.display = 'flex';
+    document.getElementById('loading-text').innerText = "資料同步中...";
+    const docRef = getUserDocRef(uid);
+    
+    if (unsubscribeSnapshot) unsubscribeSnapshot();
+
+    unsubscribeSnapshot = docRef.onSnapshot(async doc => {
+      if (doc.exists) {
+        const data = doc.data();
+        allData = data.items || [];
+        lastUpdateTimestamp = data.lastUpdated || Date.now();
+      } else {
+        // 先嘗試檢查是否有舊版 Apps Script 資料
+        const token = localStorage.getItem("google_token");
+        let migrated = false;
+        if (token) {
+          migrated = await migrateFromOldApi(uid, token, false);
+        }
+        if (!migrated) {
+          allData = [...DEFAULT_ITEMS];
+          lastUpdateTimestamp = Date.now();
+          docRef.set({ items: allData, lastUpdated: lastUpdateTimestamp });
+        }
+      }
+      renderContent();
+      document.getElementById('loading').style.display = 'none';
+    }, error => {
+      console.error("Firestore 資料讀取失敗:", error);
+      alert("資料讀取失敗，請確認 Firebase 設定與網絡連線。");
+      document.getElementById('loading').style.display = 'none';
+    });
+  }
+
+  // 將資料寫入 Firestore
+  async function saveToFirestore(newItems) {
+    if (!currentUser) return;
+    lastUpdateTimestamp = Date.now();
+    allData = newItems;
+    try {
+      await getUserDocRef(currentUser.uid).set({
+        items: allData,
+        lastUpdated: lastUpdateTimestamp
+      }, { merge: true });
+    } catch (error) {
+      console.error("儲存至 Firestore 失敗:", error);
+      alert("資料儲存失敗: " + error.message);
+    }
   }
 
   // --- UI 渲染 ---
@@ -288,7 +446,7 @@
       container.innerHTML += `<div class="px-3 px-lg-0 pb-3"><div class="text-secondary fw-bold mb-3 ps-2"><i class="fa-solid fa-star text-warning me-2"></i>重點關注項目</div><div id="list-home"></div></div>`;
       renderList(document.getElementById('list-home'), starred, false);
       
-      // --- 在首頁加入底部 Footer (上次更新 + 清除資料) ---
+      // --- 在首頁加入底部 Footer (上次更新 + 匯入舊資料 + 清除資料 + 登出) ---
       let diffDays = 0;
       if (lastUpdateTimestamp) {
         let diff = new Date().getTime() - lastUpdateTimestamp;
@@ -296,11 +454,14 @@
       }
       container.innerHTML += `
         <div class="home-footer">
-            <span><i class="fa-solid fa-clock-rotate-left me-1"></i> 距離上次更新藍圖已過 ${diffDays} 天</span>
-            <button class="btn btn-clear-data" onclick="resetAccount()"><i class="fa-solid fa-trash-can me-1"></i>重置資料</button>
+            <div class="mb-2"><i class="fa-solid fa-clock-rotate-left me-1"></i> 距離上次更新藍圖已過 ${diffDays} 天</div>
+            <div>
+              <button class="btn btn-outline-primary btn-sm rounded-pill me-2" onclick="importOldDataManually()"><i class="fa-solid fa-cloud-arrow-down me-1"></i>匯入舊版 Apps Script 資料</button>
+              <button class="btn btn-clear-data" onclick="resetAccount()"><i class="fa-solid fa-trash-can me-1"></i>重置資料</button>
+              <button class="btn btn-logout" onclick="logout()"><i class="fa-solid fa-right-from-bracket me-1"></i>登出</button>
+            </div>
         </div>
       `;
-      // ------------------------------------------------
     } else {
       let reminders = allData.filter(d => d.category === currentCategory && d.type === 'Reminder');
       let todos = allData.filter(d => d.category === currentCategory && d.type === 'Todo');
@@ -374,30 +535,45 @@
 
   async function saveTopGoal(el) { 
     el.classList.add('saving');
-    const res = await callApi('saveTopGoal', { category: currentCategory, content: el.value }); 
-    if(res) {
-        allData = res.items; lastUpdateTimestamp = res.lastUpdated; // 更新時間
-        el.classList.remove('saving');
-        el.classList.add('saved');
-        document.getElementById('save-status-text').style.opacity = '1';
-        setTimeout(() => {
-            el.classList.remove('saved');
-            document.getElementById('save-status-text').style.opacity = '0';
-        }, 1500);
+    let item = allData.find(d => d.category === currentCategory && d.type === 'Goal');
+    if (item) {
+      item.content = el.value;
+    } else {
+      allData.push({
+        id: 'goal_' + currentCategory,
+        category: currentCategory,
+        type: 'Goal',
+        content: el.value
+      });
     }
+    
+    await saveToFirestore(allData);
+    el.classList.remove('saving');
+    el.classList.add('saved');
+    document.getElementById('save-status-text').style.opacity = '1';
+    setTimeout(() => {
+        el.classList.remove('saved');
+        document.getElementById('save-status-text').style.opacity = '0';
+    }, 1500);
   }
 
   async function updateField(id, field, val) {
-    let item = allData.find(d => d.id == id); if(item) { item[field] = val; renderContent(); }
-    const res = await callApi('updateItem', { id: id, field: field, value: val }); if(res) { allData = res.items; lastUpdateTimestamp = res.lastUpdated; }
+    let item = allData.find(d => d.id == id);
+    if(item) {
+      item[field] = val;
+      renderContent();
+      await saveToFirestore(allData);
+    }
   }
   
   async function resetReminderDate(id) {
-    document.getElementById('loading').style.display = 'flex';
     let today = new Date(); today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
-    const res = await callApi('updateItem', { id: id, field: 'dateValue', value: today.toISOString().slice(0,10) });
-    if(res) { allData = res.items; lastUpdateTimestamp = res.lastUpdated; renderContent(); }
-    document.getElementById('loading').style.display = 'none';
+    let item = allData.find(d => d.id == id);
+    if (item) {
+      item.dateValue = today.toISOString().slice(0,10);
+      renderContent();
+      await saveToFirestore(allData);
+    }
   }
 
   // --- 重置帳號資料 ---
@@ -405,19 +581,21 @@
     if(!confirm("【警告】\n確定要刪除所有資料並重置嗎？\n\n這將會：\n1. 刪除您所有的目標、待辦與提醒\n2. 重新載入系統預設的範例資料\n\n此動作無法復原！")) return;
     
     document.getElementById('loading').style.display = 'flex';
-    const res = await callApi('resetData');
-    if(res) { 
-        allData = res.items; 
-        lastUpdateTimestamp = res.lastUpdated; 
-        renderContent(); 
-        alert("資料已重置為預設狀態！");
-    }
+    allData = [...DEFAULT_ITEMS];
+    await saveToFirestore(allData);
+    renderContent();
     document.getElementById('loading').style.display = 'none';
+    alert("資料已重置為預設狀態！");
   }
 
   async function saveOrder() {
-    let ids = []; document.querySelectorAll('.item-row').forEach(el => ids.push(el.getAttribute('data-id')));
-    await callApi('updateOrder', { ids: ids });
+    let ids = [];
+    document.querySelectorAll('.item-row').forEach(el => ids.push(el.getAttribute('data-id')));
+    // 依據 DOM 順序調整 allData 內相同類別與型態的項目順序
+    let otherData = allData.filter(d => !ids.includes(d.id.toString()));
+    let orderedData = ids.map(id => allData.find(d => d.id.toString() === id.toString())).filter(Boolean);
+    allData = [...otherData, ...orderedData];
+    await saveToFirestore(allData);
   }
   
   function openAddModal(type) {
@@ -431,6 +609,7 @@
     }
     editModal.show();
   }
+
   function openEditModal(id) {
     let item = allData.find(d => d.id == id); if(!item) return;
     document.getElementById('modalTitle').innerText = '編輯項目';
@@ -440,25 +619,46 @@
     document.getElementById('editDateGroup').classList.toggle('d-none', item.type !== 'Reminder');
     editModal.show();
   }
+
   async function saveEdit() {
-    document.getElementById('loading').style.display = 'flex'; editModal.hide();
+    editModal.hide();
     let id = document.getElementById('editId').value;
-    let payload = { category: currentCategory, type: document.getElementById('editType').value, content: document.getElementById('editContent').value, dateValue: document.getElementById('editDate').value };
-    let res;
-    if(id) {
-        await callApi('updateItem', { id: id, field: 'content', value: payload.content });
-        if(payload.type === 'Reminder') res = await callApi('updateItem', { id: id, field: 'dateValue', value: payload.dateValue });
-        else res = await callApi('getData');
-    } else res = await callApi('addItem', { item: payload });
-    if(res) { allData = res.items; lastUpdateTimestamp = res.lastUpdated; renderContent(); }
-    document.getElementById('loading').style.display = 'none';
+    let type = document.getElementById('editType').value;
+    let content = document.getElementById('editContent').value.trim();
+    let dateValue = document.getElementById('editDate').value;
+    
+    if (!content) return;
+
+    if (id) {
+      let item = allData.find(d => d.id == id);
+      if (item) {
+        item.content = content;
+        if (type === 'Reminder') item.dateValue = dateValue;
+      }
+    } else {
+      let newItem = {
+        id: 'item_' + Date.now(),
+        category: currentCategory,
+        type: type,
+        content: content,
+        isStarred: false,
+        isDone: false
+      };
+      if (type === 'Reminder') newItem.dateValue = dateValue;
+      allData.push(newItem);
+    }
+
+    renderContent();
+    await saveToFirestore(allData);
   }
+
   async function deleteEdit() {
     if(!confirm('確認刪除此項目？')) return;
-    document.getElementById('loading').style.display = 'flex'; editModal.hide();
-    const res = await callApi('deleteItem', { id: document.getElementById('editId').value });
-    if(res) { allData = res.items; lastUpdateTimestamp = res.lastUpdated; renderContent(); }
-    document.getElementById('loading').style.display = 'none';
+    editModal.hide();
+    let id = document.getElementById('editId').value;
+    allData = allData.filter(d => d.id != id);
+    renderContent();
+    await saveToFirestore(allData);
   }
 </script>
 </body>
