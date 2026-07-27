@@ -405,8 +405,11 @@
 
     const sidebarMenu = document.getElementById('sidebar-menu-container');
     let sidebarHtml = `
-        <a href="javascript:void(0)" class="sidebar-item ${currentCategory === 'Home' ? 'active' : ''} mb-3" onclick="switchCategory('Home')">
+        <a href="javascript:void(0)" class="sidebar-item ${currentCategory === 'Home' ? 'active' : ''} mb-2" onclick="switchCategory('Home')">
             <i class="fa-solid ${CATEGORY_HOME.icon}"></i>${CATEGORY_HOME.name}
+        </a>
+        <a href="note/index.html" class="sidebar-item mb-3" style="background: #fffdf0; color: #b45309; border: 1px solid #fef3c7;">
+            <i class="fa-solid fa-lightbulb text-warning me-2"></i>靈感隨手記
         </a>
         <div class="text-muted small fw-bold mb-2 ps-3">生活領域</div>
     `;
