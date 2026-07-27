@@ -340,6 +340,12 @@
   let currentSelectedTag = '💡 靈感';
   let editModal;
 
+  window.onerror = function(msg, url, lineNo, columnNo, error) {
+    console.error("全域異常:", msg, error);
+    alert("系統發現異常: " + msg + "\n(請確認 Firebase Console 權限與設定)");
+    return false;
+  };
+
   window.onload = function() {
     editModal = new bootstrap.Modal(document.getElementById('editNoteModal'));
 
@@ -360,6 +366,10 @@
       }
     }).catch(err => {
       console.error("Redirect 登入錯誤:", err);
+      if (err.code !== 'auth/popup-closed-by-user') {
+        alert("登入重定向失敗 (" + err.code + "): " + err.message);
+      }
+      document.getElementById('loading').style.display = 'none';
     });
 
     auth.onAuthStateChanged(user => {
@@ -387,11 +397,11 @@
         document.getElementById('login-overlay').style.display = 'none';
       }
     }).catch(err => {
-      if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user' || err.code === 'auth/operation-not-supported-in-this-environment') {
+      console.error("Popup 登入失敗:", err);
+      if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user') {
         auth.signInWithRedirect(provider);
       } else {
-        console.error("登入失敗:", err);
-        alert("登入失敗: " + err.message);
+        alert("Google 登入失敗 (" + err.code + "):\n" + err.message + "\n\n請檢查 Firebase Console 中的 Authorized Domains 授權網域與 Google 登入功能。");
         document.getElementById('loading').style.display = 'none';
       }
     });
@@ -423,12 +433,16 @@
         allNotes = doc.data().notes || [];
       } else {
         allNotes = [];
-        docRef.set({ notes: [] }, { merge: true }).catch(e => console.error(e));
+        docRef.set({ notes: [] }, { merge: true }).catch(e => {
+          console.error("寫入初始資料失敗:", e);
+          alert("資料庫寫入失敗 (" + e.code + "): " + e.message + "\n請至 Firebase Console -> Firestore Database 設定 Rules 允許寫入權限。");
+        });
       }
       renderNotes();
       document.getElementById('loading').style.display = 'none';
     }, err => {
       console.error("Firestore 讀取錯誤:", err);
+      alert("Firestore 資料讀取失敗 (" + err.code + "):\n" + err.message + "\n\n常見原因：\n1. Firebase Console 尚未建立 Firestore 數據庫\n2. Firestore Rules 規則限制存取 (需設定 allow read, write)");
       renderNotes();
       document.getElementById('loading').style.display = 'none';
     });
