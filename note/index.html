@@ -592,12 +592,25 @@
       editModal = new bootstrap.Modal(modalEl);
     }
 
-    // 快捷鍵支援：Ctrl + Enter 快速發表
-    document.getElementById('note-input').addEventListener('keydown', function(e) {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-        addNote();
-      }
-    });
+    // 快捷鍵支援：Ctrl + Enter 快速發表 & 自動偵測內文數字 (1~49)
+    const noteInputEl = document.getElementById('note-input');
+    if (noteInputEl) {
+      noteInputEl.addEventListener('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          addNote();
+        }
+      });
+      noteInputEl.addEventListener('input', function(e) {
+        handleAutoDetectNumbers(e.target.value, false);
+      });
+    }
+
+    const editInputEl = document.getElementById('edit-note-content');
+    if (editInputEl) {
+      editInputEl.addEventListener('input', function(e) {
+        handleAutoDetectNumbers(e.target.value, true);
+      });
+    }
 
     // 處理重定向登入結果
     auth.getRedirectResult().then(result => {
@@ -668,6 +681,63 @@
 
   let selectedNoteNumbers = [];
   let editSelectedNoteNumbers = [];
+  let manuallyDeselectedNumbers = new Set();
+  let editManuallyDeselectedNumbers = new Set();
+
+  function extractNumbers1To49(text) {
+    if (!text) return [];
+    // 匹配 1~49 獨立整數 (包含中文前後文脈絡，如 "7號"、"12點"、"1, 5, 49")
+    const matches = text.match(/(?<!\d)([1-9]|[1-3][0-9]|4[0-9])(?!\d)/g);
+    if (!matches) return [];
+    const nums = matches.map(n => parseInt(n, 10)).filter(n => n >= 1 && n <= 49);
+    return Array.from(new Set(nums)).sort((a, b) => a - b);
+  }
+
+  function handleAutoDetectNumbers(text, isEdit = false) {
+    if (!isEdit && currentSelectedTag !== '💡 靈感') return;
+    if (isEdit && document.getElementById('edit-note-tag').value !== '💡 靈感') return;
+
+    const detected = extractNumbers1To49(text);
+    if (detected.length === 0) return;
+
+    if (!isEdit) {
+      let added = false;
+      detected.forEach(num => {
+        if (!manuallyDeselectedNumbers.has(num) && !selectedNoteNumbers.includes(num)) {
+          selectedNoteNumbers.push(num);
+          added = true;
+        }
+      });
+      if (added) {
+        selectedNoteNumbers.sort((a, b) => a - b);
+        const switchEl = document.getElementById('number-toggle-switch');
+        if (!switchEl.checked) {
+          switchEl.checked = true;
+          document.getElementById('number-circles-grid').style.display = 'flex';
+          document.getElementById('number-toggle-label').innerText = '開啟';
+        }
+        generateNumberCircles('number-circles-grid', selectedNoteNumbers, 'selectNumberCircle');
+      }
+    } else {
+      let added = false;
+      detected.forEach(num => {
+        if (!editManuallyDeselectedNumbers.has(num) && !editSelectedNoteNumbers.includes(num)) {
+          editSelectedNoteNumbers.push(num);
+          added = true;
+        }
+      });
+      if (added) {
+        editSelectedNoteNumbers.sort((a, b) => a - b);
+        const switchEl = document.getElementById('edit-number-toggle-switch');
+        if (!switchEl.checked) {
+          switchEl.checked = true;
+          document.getElementById('edit-number-circles-grid').style.display = 'flex';
+          document.getElementById('edit-number-toggle-label').innerText = '開啟';
+        }
+        generateNumberCircles('edit-number-circles-grid', editSelectedNoteNumbers, 'selectEditNumberCircle');
+      }
+    }
+  }
 
   function getNoteNumbersArray(note) {
     if (note && Array.isArray(note.numbers) && note.numbers.length > 0) {
@@ -717,6 +787,7 @@
       grid.style.display = 'none';
       label.innerText = '關閉';
       selectedNoteNumbers = [];
+      manuallyDeselectedNumbers.clear();
     }
   }
 
@@ -725,9 +796,11 @@
     const idx = selectedNoteNumbers.indexOf(num);
     if (idx > -1) {
       selectedNoteNumbers.splice(idx, 1);
+      manuallyDeselectedNumbers.add(num);
     } else {
       selectedNoteNumbers.push(num);
       selectedNoteNumbers.sort((a, b) => a - b);
+      manuallyDeselectedNumbers.delete(num);
     }
     generateNumberCircles('number-circles-grid', selectedNoteNumbers, 'selectNumberCircle');
   }
@@ -756,6 +829,7 @@
       grid.style.display = 'none';
       label.innerText = '關閉';
       editSelectedNoteNumbers = [];
+      editManuallyDeselectedNumbers.clear();
     }
   }
 
@@ -764,9 +838,11 @@
     const idx = editSelectedNoteNumbers.indexOf(num);
     if (idx > -1) {
       editSelectedNoteNumbers.splice(idx, 1);
+      editManuallyDeselectedNumbers.add(num);
     } else {
       editSelectedNoteNumbers.push(num);
       editSelectedNoteNumbers.sort((a, b) => a - b);
+      editManuallyDeselectedNumbers.delete(num);
     }
     generateNumberCircles('edit-number-circles-grid', editSelectedNoteNumbers, 'selectEditNumberCircle');
   }
@@ -1012,6 +1088,8 @@
   function openEditModal(id) {
     const note = allNotes.find(n => n.id === id);
     if (!note) return;
+
+    editManuallyDeselectedNumbers.clear();
 
     document.getElementById('edit-note-id').value = note.id;
     document.getElementById('edit-note-content').value = note.content;
