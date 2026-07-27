@@ -121,11 +121,14 @@
 <body>
 
   <div id="login-overlay">
-    <div class="mb-5 text-center p-4">
+    <div class="mb-4 text-center p-4">
       <h1 class="fw-bold mb-3" style="color: var(--primary-color); font-size: 2.5rem;"><i class="fa-solid fa-rocket me-3"></i>夢想藍圖</h1>
-      <p class="text-secondary lead">請使用 Google 帳號登入以同步資料</p>
+      <p class="text-secondary lead mb-2">請使用 Google 帳號登入以同步資料</p>
+      <div class="badge bg-light text-success border px-3 py-2 rounded-pill fw-normal">
+        <i class="fa-solid fa-shield-halved me-1"></i> 支援 AES-256 端對端加密
+      </div>
     </div>
-    <button class="btn-google-login" onclick="loginWithGoogle()">
+    <button class="btn-google-login mb-3" onclick="loginWithGoogle(false)">
       <svg width="20" height="20" viewBox="0 0 48 48" class="me-2">
         <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
         <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
@@ -134,6 +137,9 @@
       </svg>
       使用 Google 帳號登入
     </button>
+    <a href="javascript:void(0)" class="text-secondary small text-decoration-none opacity-75 mt-2" onclick="loginWithGoogle(true)">
+      <i class="fa-solid fa-arrow-right-to-bracket me-1"></i>若彈窗無回應，點此使用頁面跳轉登入
+    </a>
   </div>
 
   <div id="loading" style="display:none;">
@@ -385,6 +391,31 @@
     document.getElementById('btnSave').onclick = saveEdit;
     document.getElementById('btnDelete').onclick = deleteEdit;
 
+    // 處理頁面跳轉 (Redirect) 登入結果
+    auth.getRedirectResult().then(async (result) => {
+      if (result && result.user) {
+        currentUser = result.user;
+        if (result.credential && result.credential.idToken) {
+          localStorage.setItem("google_token", result.credential.idToken);
+        }
+        try {
+          await initCryptoKey(result.user.uid);
+        } catch(e) {
+          console.error("加密金鑰準備異常:", e);
+        }
+        document.getElementById('login-overlay').style.display = 'none';
+        document.getElementById('user-info-area').style.display = 'block';
+        document.getElementById('user-email-text').innerText = result.user.email || result.user.displayName || '已登入';
+        subscribeToUserData(result.user.uid);
+      }
+    }).catch(err => {
+      console.error("Redirect 登入結果處理錯誤:", err);
+      if (err.code !== 'auth/popup-closed-by-user') {
+        alert("登入驗證失敗: " + err.message);
+      }
+      document.getElementById('loading').style.display = 'none';
+    });
+
     // 監聽 Firebase Authentication 狀態變更
     auth.onAuthStateChanged(async (user) => {
       if (user) {
@@ -409,13 +440,13 @@
   };
 
   // Google 登入
-  function loginWithGoogle() {
+  function loginWithGoogle(forceRedirect = false) {
     const provider = new firebase.auth.GoogleAuthProvider();
     document.getElementById('loading').style.display = 'flex';
     document.getElementById('loading-text').innerText = "登入驗證中...";
 
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    if (isMobile) {
+    if (isMobile || forceRedirect) {
       auth.signInWithRedirect(provider);
     } else {
       auth.signInWithPopup(provider).then(async (result) => {
@@ -423,11 +454,10 @@
           localStorage.setItem("google_token", result.credential.idToken);
         }
       }).catch(error => {
-        if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
+        console.warn("Google Popup 登入遭阻擋或取消，自動切換至 Redirect:", error);
+        if (error.code !== 'auth/popup-closed-by-user') {
           auth.signInWithRedirect(provider);
         } else {
-          console.error("Google 登入失敗:", error);
-          alert("登入失敗: " + error.message);
           document.getElementById('loading').style.display = 'none';
         }
       });
