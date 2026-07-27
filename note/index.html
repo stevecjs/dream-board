@@ -469,9 +469,17 @@
     }
 
     async function attemptDecrypt(cipherText, key) {
-      if (!key) return null;
+      if (!key || typeof cipherText !== 'string') return null;
+      let base64Str = '';
+      if (cipherText.startsWith('ENC:v1:')) {
+        base64Str = cipherText.slice(7);
+      } else if (cipherText.startsWith('ENC:')) {
+        base64Str = cipherText.slice(4);
+      } else {
+        return null;
+      }
+      
       try {
-        const base64Str = cipherText.slice(7);
         const binary = atob(base64Str);
         const combined = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i++) {
@@ -495,8 +503,10 @@
 
     async function decryptData(cipherText) {
       if (!cipherText) return cipherText;
+      if (typeof cipherText !== 'string') return cipherText;
+      
       // 舊版明文資料直接回傳
-      if (typeof cipherText !== 'string' || !cipherText.startsWith('ENC:v1:')) return cipherText;
+      if (!cipherText.startsWith('ENC:')) return cipherText;
       
       // 優先使用 1,000 次迭代金鑰解密
       let res = await attemptDecrypt(cipherText, cryptoKey1k);
