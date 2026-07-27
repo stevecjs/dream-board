@@ -208,12 +208,13 @@
     }
 
     .number-picker-container {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      max-height: 150px;
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 8px 4px;
+      justify-items: center;
+      max-height: 220px;
       overflow-y: auto;
-      padding: 10px;
+      padding: 12px 8px;
       background: #fffdf0;
       border: 1px solid #fef3c7;
       border-radius: 14px;
@@ -739,7 +740,7 @@
         const switchEl = document.getElementById('number-toggle-switch');
         if (!switchEl.checked) {
           switchEl.checked = true;
-          document.getElementById('number-circles-grid').style.display = 'flex';
+          document.getElementById('number-circles-grid').style.display = 'grid';
           document.getElementById('number-toggle-label').innerText = '開啟';
         }
       }
@@ -761,7 +762,7 @@
         const switchEl = document.getElementById('edit-number-toggle-switch');
         if (!switchEl.checked) {
           switchEl.checked = true;
-          document.getElementById('edit-number-circles-grid').style.display = 'flex';
+          document.getElementById('edit-number-circles-grid').style.display = 'grid';
           document.getElementById('edit-number-toggle-label').innerText = '開啟';
         }
       }
@@ -811,7 +812,7 @@
     const grid = document.getElementById('number-circles-grid');
     const label = document.getElementById('number-toggle-label');
     if (enabled) {
-      grid.style.display = 'flex';
+      grid.style.display = 'grid';
       label.innerText = '開啟';
       if (!selectedNoteNumbers) selectedNoteNumbers = [];
       generateNumberCircles('number-circles-grid', selectedNoteNumbers, 'selectNumberCircle');
@@ -853,7 +854,7 @@
     const grid = document.getElementById('edit-number-circles-grid');
     const label = document.getElementById('edit-number-toggle-label');
     if (enabled) {
-      grid.style.display = 'flex';
+      grid.style.display = 'grid';
       label.innerText = '開啟';
       if (!editSelectedNoteNumbers) editSelectedNoteNumbers = [];
       generateNumberCircles('edit-number-circles-grid', editSelectedNoteNumbers, 'selectEditNumberCircle');
