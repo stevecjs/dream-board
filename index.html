@@ -149,6 +149,7 @@
           <div class="sidebar-menu" id="sidebar-menu-container"></div>
           <div class="mt-auto pt-3 border-top text-center" id="user-info-area" style="display:none;">
               <small class="text-muted d-block text-truncate mb-2" id="user-email-text"></small>
+              <button class="btn btn-outline-primary w-100 mb-2 btn-sm rounded-pill" onclick="importOldDataManually()"><i class="fa-solid fa-cloud-arrow-down me-1"></i>匯入舊版資料</button>
               <button class="btn btn-logout w-100 mb-2" onclick="logout()"><i class="fa-solid fa-right-from-bracket me-1"></i>登出帳號</button>
           </div>
       </nav>
@@ -640,7 +641,8 @@
       container.innerHTML += `
         <div class="home-footer">
             <div class="mb-2"><i class="fa-solid fa-clock-rotate-left me-1"></i> 距離上次更新藍圖已過 ${diffDays} 天</div>
-            <div>
+            <div class="d-flex flex-wrap justify-content-center gap-2 mt-3">
+              <button class="btn btn-outline-primary btn-sm rounded-pill px-3" onclick="importOldDataManually()"><i class="fa-solid fa-cloud-arrow-down me-1"></i>匯入舊版 (Apps Script) 資料</button>
               <button class="btn btn-clear-data" onclick="resetAccount()"><i class="fa-solid fa-trash-can me-1"></i>重置資料</button>
               <button class="btn btn-logout" onclick="logout()"><i class="fa-solid fa-right-from-bracket me-1"></i>登出</button>
             </div>
