@@ -258,6 +258,10 @@
     let cryptoKey = null;
 
     async function initCryptoKey(uid) {
+      if (!window.crypto || !window.crypto.subtle) {
+        console.warn("當前瀏覽器環境不支援 Web Crypto Subtitle，將使用原始資料處理");
+        return;
+      }
       try {
         const encoder = new TextEncoder();
         const keyMaterial = await window.crypto.subtle.importKey(
@@ -271,7 +275,7 @@
           {
             name: "PBKDF2",
             salt: encoder.encode("Salt_" + uid),
-            iterations: 100000,
+            iterations: 1000,
             hash: "SHA-256"
           },
           keyMaterial,
@@ -346,7 +350,11 @@
     auth.onAuthStateChanged(async (user) => {
       if (user) {
         currentUser = user;
-        await initCryptoKey(user.uid);
+        try {
+          await initCryptoKey(user.uid);
+        } catch(e) {
+          console.error("加密金鑰準備異常:", e);
+        }
         document.getElementById('login-overlay').style.display = 'none';
         document.getElementById('user-info-area').style.display = 'block';
         document.getElementById('user-email-text').innerText = user.email || user.displayName || '已登入';
@@ -455,29 +463,34 @@
     if (unsubscribeSnapshot) unsubscribeSnapshot();
 
     unsubscribeSnapshot = docRef.onSnapshot(async doc => {
-      if (doc.exists) {
-        const data = doc.data();
-        const rawItems = data.items || [];
-        allData = await Promise.all(rawItems.map(async item => ({
-          ...item,
-          content: await decryptData(item.content)
-        })));
-        lastUpdateTimestamp = data.lastUpdated || Date.now();
-      } else {
-        // 先嘗試檢查是否有舊版 Apps Script 資料
-        const token = localStorage.getItem("google_token");
-        let migrated = false;
-        if (token) {
-          migrated = await migrateFromOldApi(uid, token, false);
+      try {
+        if (doc.exists) {
+          const data = doc.data();
+          const rawItems = data.items || [];
+          allData = await Promise.all(rawItems.map(async item => ({
+            ...item,
+            content: await decryptData(item.content)
+          })));
+          lastUpdateTimestamp = data.lastUpdated || Date.now();
+        } else {
+          // 先嘗試檢查是否有舊版 Apps Script 資料
+          const token = localStorage.getItem("google_token");
+          let migrated = false;
+          if (token) {
+            migrated = await migrateFromOldApi(uid, token, false);
+          }
+          if (!migrated) {
+            allData = [...DEFAULT_ITEMS];
+            lastUpdateTimestamp = Date.now();
+            await saveToFirestore(allData);
+          }
         }
-        if (!migrated) {
-          allData = [...DEFAULT_ITEMS];
-          lastUpdateTimestamp = Date.now();
-          await saveToFirestore(allData);
-        }
+        renderContent();
+      } catch (err) {
+        console.error("同步解密發生錯誤:", err);
+      } finally {
+        document.getElementById('loading').style.display = 'none';
       }
-      renderContent();
-      document.getElementById('loading').style.display = 'none';
     }, error => {
       console.error("Firestore 資料讀取失敗:", error);
       alert("資料讀取失敗，請確認 Firebase 設定與網絡連線。");

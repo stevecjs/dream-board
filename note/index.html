@@ -394,6 +394,10 @@
     let cryptoKey = null;
 
     async function initCryptoKey(uid) {
+      if (!window.crypto || !window.crypto.subtle) {
+        console.warn("當前瀏覽器環境不支援 Web Crypto Subtitle，將使用原始資料處理");
+        return;
+      }
       try {
         const encoder = new TextEncoder();
         const keyMaterial = await window.crypto.subtle.importKey(
@@ -407,7 +411,7 @@
           {
             name: "PBKDF2",
             salt: encoder.encode("Salt_" + uid),
-            iterations: 100000,
+            iterations: 1000,
             hash: "SHA-256"
           },
           keyMaterial,
@@ -481,7 +485,11 @@
     auth.onAuthStateChanged(async user => {
       if (user) {
         currentUser = user;
-        await initCryptoKey(user.uid);
+        try {
+          await initCryptoKey(user.uid);
+        } catch(e) {
+          console.error("加密金鑰準備異常:", e);
+        }
         document.getElementById('login-overlay').style.display = 'none';
         document.getElementById('user-email-text').innerText = user.email || user.displayName || '已登入';
         subscribeToNotes(user.uid);
@@ -539,21 +547,23 @@
     document.getElementById('loading-text').innerText = "資料解密同步中...";
 
     unsubscribeSnapshot = docRef.onSnapshot(async doc => {
-      if (doc.exists) {
-        const rawNotes = doc.data().notes || [];
-        allNotes = await Promise.all(rawNotes.map(async note => ({
-          ...note,
-          content: await decryptData(note.content)
-        })));
-      } else {
-        allNotes = [];
-        docRef.set({ notes: [] }, { merge: true }).catch(e => {
-          console.error("寫入初始資料失敗:", e);
-          alert("資料庫寫入失敗 (" + e.code + "): " + e.message + "\n請至 Firebase Console -> Firestore Database 設定 Rules 允許寫入權限。");
-        });
+      try {
+        if (doc.exists) {
+          const rawNotes = doc.data().notes || [];
+          allNotes = await Promise.all(rawNotes.map(async note => ({
+            ...note,
+            content: await decryptData(note.content)
+          })));
+        } else {
+          allNotes = [];
+          await saveNotesToFirestore(allNotes);
+        }
+        renderNotes();
+      } catch (err) {
+        console.error("靈感同步失敗:", err);
+      } finally {
+        document.getElementById('loading').style.display = 'none';
       }
-      renderNotes();
-      document.getElementById('loading').style.display = 'none';
     }, err => {
       console.error("Firestore 讀取錯誤:", err);
       alert("Firestore 資料讀取失敗 (" + err.code + "):\n" + err.message + "\n\n常見原因：\n1. Firebase Console 尚未建立 Firestore 數據庫\n2. Firestore Rules 規則限制存取 (需設定 allow read, write)");
