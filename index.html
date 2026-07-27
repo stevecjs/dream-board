@@ -246,6 +246,136 @@
   
   const CATEGORY_HOME = { id: 'Home', name: '首頁總覽', icon: 'fa-house' };
 
+  // === 🔒 端對端加密 (E2E AES-256-GCM) 多金鑰相容模組 ===
+  let cryptoKey1k = null;
+  let cryptoKey100k = null;
+
+  async function initCryptoKey(uid) {
+    if (!window.crypto || !window.crypto.subtle) {
+      console.warn("當前瀏覽器環境不支援 Web Crypto Subtitle，將使用原始資料處理");
+      return;
+    }
+    try {
+      const encoder = new TextEncoder();
+      const keyMaterial = await window.crypto.subtle.importKey(
+        "raw",
+        encoder.encode("HandyDreamSecretSalt_2026_" + uid),
+        { name: "PBKDF2" },
+        false,
+        ["deriveKey"]
+      );
+      cryptoKey1k = await window.crypto.subtle.deriveKey(
+        {
+          name: "PBKDF2",
+          salt: encoder.encode("Salt_" + uid),
+          iterations: 1000,
+          hash: "SHA-256"
+        },
+        keyMaterial,
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["encrypt", "decrypt"]
+      );
+      cryptoKey100k = await window.crypto.subtle.deriveKey(
+        {
+          name: "PBKDF2",
+          salt: encoder.encode("Salt_" + uid),
+          iterations: 100000,
+          hash: "SHA-256"
+        },
+        keyMaterial,
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["encrypt", "decrypt"]
+      );
+    } catch (e) {
+      console.error("端對端加密初始化失敗:", e);
+    }
+  }
+
+  async function encryptData(plainText) {
+    const key = cryptoKey1k || cryptoKey100k;
+    if (!plainText || !key) return plainText;
+    if (typeof plainText === 'string' && plainText.startsWith('ENC:v1:')) return plainText;
+    
+    try {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(plainText);
+      const iv = window.crypto.getRandomValues(new Uint8Array(12));
+      const encryptedBuffer = await window.crypto.subtle.encrypt(
+        { name: "AES-GCM", iv: iv },
+        key,
+        data
+      );
+      
+      const combined = new Uint8Array(iv.length + encryptedBuffer.byteLength);
+      combined.set(iv, 0);
+      combined.set(new Uint8Array(encryptedBuffer), iv.length);
+      
+      let binary = '';
+      const len = combined.byteLength;
+      for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(combined[i]);
+      }
+      return 'ENC:v1:' + btoa(binary);
+    } catch (e) {
+      console.error("加密過程失敗:", e);
+      return plainText;
+    }
+  }
+
+  async function attemptDecrypt(cipherText, key) {
+    if (!key || typeof cipherText !== 'string') return null;
+    let base64Str = '';
+    if (cipherText.startsWith('ENC:v1:')) {
+      base64Str = cipherText.slice(7);
+    } else if (cipherText.startsWith('ENC:')) {
+      base64Str = cipherText.slice(4);
+    } else {
+      return null;
+    }
+    
+    try {
+      const binary = atob(base64Str);
+      const combined = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        combined[i] = binary.charCodeAt(i);
+      }
+      
+      const iv = combined.slice(0, 12);
+      const data = combined.slice(12);
+      
+      const decryptedBuffer = await window.crypto.subtle.decrypt(
+        { name: "AES-GCM", iv: iv },
+        key,
+        data
+      );
+      
+      return new TextDecoder().decode(decryptedBuffer);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function decryptData(cipherText) {
+    if (!cipherText) return cipherText;
+    if (typeof cipherText !== 'string') return cipherText;
+    
+    // 舊版明文資料直接回傳
+    if (!cipherText.startsWith('ENC:')) return cipherText;
+    
+    // 優先使用 1,000 次迭代金鑰解密
+    let res = await attemptDecrypt(cipherText, cryptoKey1k);
+    if (res !== null) return res;
+
+    // 嘗試使用 100,000 次迭代金鑰解密
+    res = await attemptDecrypt(cipherText, cryptoKey100k);
+    if (res !== null) return res;
+
+    // 若皆無法解密則回傳原字串以保護資料不被刪除
+    return cipherText;
+  }
+
   window.onload = function() {
     renderNavbar();
     const modalEl = document.getElementById('editModal');
@@ -254,136 +384,6 @@
     }
     document.getElementById('btnSave').onclick = saveEdit;
     document.getElementById('btnDelete').onclick = deleteEdit;
-
-    // === 🔒 端對端加密 (E2E AES-256-GCM) 多金鑰相容模組 ===
-    let cryptoKey1k = null;
-    let cryptoKey100k = null;
-
-    async function initCryptoKey(uid) {
-      if (!window.crypto || !window.crypto.subtle) {
-        console.warn("當前瀏覽器環境不支援 Web Crypto Subtitle，將使用原始資料處理");
-        return;
-      }
-      try {
-        const encoder = new TextEncoder();
-        const keyMaterial = await window.crypto.subtle.importKey(
-          "raw",
-          encoder.encode("HandyDreamSecretSalt_2026_" + uid),
-          { name: "PBKDF2" },
-          false,
-          ["deriveKey"]
-        );
-        cryptoKey1k = await window.crypto.subtle.deriveKey(
-          {
-            name: "PBKDF2",
-            salt: encoder.encode("Salt_" + uid),
-            iterations: 1000,
-            hash: "SHA-256"
-          },
-          keyMaterial,
-          { name: "AES-GCM", length: 256 },
-          false,
-          ["encrypt", "decrypt"]
-        );
-        cryptoKey100k = await window.crypto.subtle.deriveKey(
-          {
-            name: "PBKDF2",
-            salt: encoder.encode("Salt_" + uid),
-            iterations: 100000,
-            hash: "SHA-256"
-          },
-          keyMaterial,
-          { name: "AES-GCM", length: 256 },
-          false,
-          ["encrypt", "decrypt"]
-        );
-      } catch (e) {
-        console.error("端對端加密初始化失敗:", e);
-      }
-    }
-
-    async function encryptData(plainText) {
-      const key = cryptoKey1k || cryptoKey100k;
-      if (!plainText || !key) return plainText;
-      if (typeof plainText === 'string' && plainText.startsWith('ENC:v1:')) return plainText;
-      
-      try {
-        const encoder = new TextEncoder();
-        const data = encoder.encode(plainText);
-        const iv = window.crypto.getRandomValues(new Uint8Array(12));
-        const encryptedBuffer = await window.crypto.subtle.encrypt(
-          { name: "AES-GCM", iv: iv },
-          key,
-          data
-        );
-        
-        const combined = new Uint8Array(iv.length + encryptedBuffer.byteLength);
-        combined.set(iv, 0);
-        combined.set(new Uint8Array(encryptedBuffer), iv.length);
-        
-        let binary = '';
-        const len = combined.byteLength;
-        for (let i = 0; i < len; i++) {
-          binary += String.fromCharCode(combined[i]);
-        }
-        return 'ENC:v1:' + btoa(binary);
-      } catch (e) {
-        console.error("加密過程失敗:", e);
-        return plainText;
-      }
-    }
-
-    async function attemptDecrypt(cipherText, key) {
-      if (!key || typeof cipherText !== 'string') return null;
-      let base64Str = '';
-      if (cipherText.startsWith('ENC:v1:')) {
-        base64Str = cipherText.slice(7);
-      } else if (cipherText.startsWith('ENC:')) {
-        base64Str = cipherText.slice(4);
-      } else {
-        return null;
-      }
-      
-      try {
-        const binary = atob(base64Str);
-        const combined = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) {
-          combined[i] = binary.charCodeAt(i);
-        }
-        
-        const iv = combined.slice(0, 12);
-        const data = combined.slice(12);
-        
-        const decryptedBuffer = await window.crypto.subtle.decrypt(
-          { name: "AES-GCM", iv: iv },
-          key,
-          data
-        );
-        
-        return new TextDecoder().decode(decryptedBuffer);
-      } catch (e) {
-        return null;
-      }
-    }
-
-    async function decryptData(cipherText) {
-      if (!cipherText) return cipherText;
-      if (typeof cipherText !== 'string') return cipherText;
-      
-      // 舊版明文資料直接回傳
-      if (!cipherText.startsWith('ENC:')) return cipherText;
-      
-      // 優先使用 1,000 次迭代金鑰解密
-      let res = await attemptDecrypt(cipherText, cryptoKey1k);
-      if (res !== null) return res;
-
-      // 嘗試使用 100,000 次迭代金鑰解密
-      res = await attemptDecrypt(cipherText, cryptoKey100k);
-      if (res !== null) return res;
-
-      // 若皆無法解密則回傳原字串以保護資料不被刪除
-      return cipherText;
-    }
 
     // 監聽 Firebase Authentication 狀態變更
     auth.onAuthStateChanged(async (user) => {
@@ -400,7 +400,6 @@
         subscribeToUserData(user.uid);
       } else {
         currentUser = null;
-        cryptoKey = null;
         if (unsubscribeSnapshot) unsubscribeSnapshot();
         document.getElementById('user-info-area').style.display = 'none';
         document.getElementById('login-overlay').style.display = 'flex';
