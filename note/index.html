@@ -270,13 +270,25 @@
       </div>
     </div>
 
-    <!-- 搜尋與篩選列 -->
-    <div class="d-flex align-items-center mb-3">
-      <div class="input-group input-group-sm bg-white rounded-pill shadow-sm border-0 px-3 py-1 me-2">
-        <span class="input-group-text bg-transparent border-0 text-muted"><i class="fa-solid fa-magnifying-glass"></i></span>
-        <input type="text" id="search-input" class="form-control bg-transparent border-0 shadow-none" placeholder="搜尋歷史靈感..." oninput="renderNotes()">
+    <!-- 搜尋與日期篩選列 -->
+    <div class="card border-0 shadow-sm rounded-4 p-3 mb-3 bg-white">
+      <div class="row g-2 align-items-center">
+        <div class="col-12 col-sm">
+          <div class="input-group input-group-sm bg-light rounded-pill border-0 px-3 py-1">
+            <span class="input-group-text bg-transparent border-0 text-muted"><i class="fa-solid fa-magnifying-glass"></i></span>
+            <input type="text" id="search-input" class="form-control bg-transparent border-0 shadow-none" placeholder="搜尋靈感文字或日期 (如 2026-07-27)..." oninput="renderNotes()">
+          </div>
+        </div>
+        <div class="col col-sm-auto">
+          <div class="input-group input-group-sm bg-light rounded-pill border-0 px-2 py-1">
+            <span class="input-group-text bg-transparent border-0 text-muted pe-1"><i class="fa-regular fa-calendar-days"></i></span>
+            <input type="date" id="search-date-input" class="form-control bg-transparent border-0 shadow-none" style="font-size:0.85rem;" onchange="renderNotes()" title="選擇日期篩選">
+          </div>
+        </div>
+        <div class="col-auto">
+          <button class="btn btn-sm btn-light rounded-circle shadow-sm" style="width:34px;height:34px;" onclick="clearSearch()" title="重置搜尋與日期"><i class="fa-solid fa-rotate-left"></i></button>
+        </div>
       </div>
-      <button class="btn btn-sm btn-light rounded-circle shadow-sm" style="width:36px;height:36px;flex-shrink:0;" onclick="clearSearch()" title="清除搜尋"><i class="fa-solid fa-xmark"></i></button>
     </div>
 
     <!-- 靈感列表容器 -->
@@ -491,12 +503,31 @@
   // 渲染靈感時間軸列表
   function renderNotes() {
     const container = document.getElementById('notes-container');
-    const query = document.getElementById('search-input').value.trim().toLowerCase();
+    const query = document.getElementById('search-input') ? document.getElementById('search-input').value.trim().toLowerCase() : '';
+    const searchDate = document.getElementById('search-date-input') ? document.getElementById('search-date-input').value : '';
     container.innerHTML = '';
 
     let filtered = allNotes.filter(n => {
-      if (!query) return true;
-      return n.content.toLowerCase().includes(query) || (n.tag && n.tag.toLowerCase().includes(query));
+      const d = new Date(n.createdAt);
+      const dateIso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      const dateSlash = d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate();
+      const dateZh = (d.getMonth() + 1) + "月" + d.getDate() + "日";
+      const fullZh = d.getFullYear() + "年" + dateZh;
+
+      // 日期選擇器精確比對
+      if (searchDate && dateIso !== searchDate) {
+        return false;
+      }
+
+      // 文字模糊搜尋（支援文字、標籤或日期格式）
+      if (query) {
+        const matchesContent = n.content.toLowerCase().includes(query);
+        const matchesTag = n.tag && n.tag.toLowerCase().includes(query);
+        const matchesDate = dateIso.includes(query) || dateSlash.includes(query) || dateZh.includes(query) || fullZh.includes(query);
+        return matchesContent || matchesTag || matchesDate;
+      }
+
+      return true;
     });
 
     if (!filtered.length) {
@@ -662,7 +693,8 @@
   }
 
   function clearSearch() {
-    document.getElementById('search-input').value = '';
+    if (document.getElementById('search-input')) document.getElementById('search-input').value = '';
+    if (document.getElementById('search-date-input')) document.getElementById('search-date-input').value = '';
     renderNotes();
   }
 </script>

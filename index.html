@@ -158,10 +158,13 @@
 
   <div class="nav-container">
     <div class="nav-categories-scroll" id="nav-categories"></div>
-    <div class="nav-home-area">
-      <button class="btn-home-large" id="btn-home-large" onclick="switchCategory('Home')">
+    <div class="nav-home-area d-flex gap-2">
+      <button class="btn-home-large flex-grow-1" id="btn-home-large" onclick="switchCategory('Home')">
         <i class="fa-solid fa-house me-2"></i> 首頁 / 整體目標
       </button>
+      <a href="note/index.html" class="btn btn-warning rounded-pill px-3 d-flex align-items-center justify-content-center text-white fw-bold shadow-sm" style="min-width: 100px; text-decoration: none;">
+        <i class="fa-solid fa-lightbulb me-1"></i> 靈感
+      </a>
     </div>
   </div>
 
@@ -462,6 +465,19 @@
     container.innerHTML = headerHtml;
 
     if (currentCategory === 'Home') {
+      container.innerHTML += `
+        <div class="px-3 px-lg-0 mb-4">
+          <a href="note/index.html" class="card p-3 text-decoration-none shadow-sm border-0 d-flex flex-row align-items-center" style="background: linear-gradient(135deg, #fffdf0, #fff7d6); border-radius: 18px; border: 1px solid #fef3c7 !important;">
+            <div class="rounded-circle bg-warning text-white me-3 d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px; height:48px; font-size:1.4rem;">
+              <i class="fa-solid fa-lightbulb"></i>
+            </div>
+            <div class="flex-grow-1">
+              <h6 class="fw-bold mb-1" style="color: #92400e;">💡 靈感隨手記</h6>
+              <small class="text-secondary">隨時捕捉閃光般的創意想法與日常隨筆 ➔</small>
+            </div>
+          </a>
+        </div>
+      `;
       let starred = allData.filter(d => d.isStarred && d.type !== 'Goal');
       container.innerHTML += `<div class="px-3 px-lg-0 pb-3"><div class="text-secondary fw-bold mb-3 ps-2"><i class="fa-solid fa-star text-warning me-2"></i>重點關注項目</div><div id="list-home"></div></div>`;
       renderList(document.getElementById('list-home'), starred, false);
