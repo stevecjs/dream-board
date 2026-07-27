@@ -452,18 +452,20 @@
     try {
       const docRef = getUserDocRef(uid);
       const docSnap = await docRef.get();
+      const authToken = token || localStorage.getItem("google_token") || "";
       // 若文件不存在或強制進行匯入
       if (!docSnap.exists || force) {
         let response = await fetch(OLD_API_URL, {
           method: 'POST',
           headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify({ action: 'getData', token: token })
+          body: JSON.stringify({ action: 'getData', token: authToken, email: currentUser ? currentUser.email : '' })
         });
         const data = await response.json();
         if (data && data.items && data.items.length > 0) {
           allData = data.items;
           lastUpdateTimestamp = data.lastUpdated || Date.now();
           await saveToFirestore(allData);
+          renderContent();
           return true;
         }
       }
@@ -475,21 +477,22 @@
 
   // 手動一鍵匯入舊版資料
   async function importOldDataManually() {
-    const token = localStorage.getItem("google_token");
-    if (!token) {
-      alert("請登入 Google 帳號後再進行匯入。");
+    if (!currentUser) {
+      alert("請先登入帳號後再進行匯入。");
       return;
     }
     if (!confirm("確定要從舊版 (Google Apps Script API) 載入舊資料並備份儲存至 Firebase 嗎？")) return;
 
     document.getElementById('loading').style.display = 'flex';
     document.getElementById('loading-text').innerText = "從舊版資料庫匯入中...";
+    const token = localStorage.getItem("google_token") || "";
     const success = await migrateFromOldApi(currentUser.uid, token, true);
     document.getElementById('loading').style.display = 'none';
     if (success) {
       alert("成功將舊版資料匯入至 Firebase！");
+      renderContent();
     } else {
-      alert("嘗試讀取舊版資料失敗，請確認登入權限或舊版是否有資料。");
+      alert("嘗試讀取舊版資料失敗，請確認舊版資料庫是否有資料。");
     }
   }
 
@@ -628,6 +631,31 @@
           </a>
         </div>
       `;
+      // 1. 各領域目標與項目統計卡片 (全領域快速總覽)
+      let domainCardsHtml = DOMAINS.map(cat => {
+        let catGoal = allData.find(d => d.category === cat.id && d.type === 'Goal')?.content;
+        let itemsCount = allData.filter(d => d.category === cat.id && d.type !== 'Goal').length;
+        if (!catGoal && itemsCount === 0) return '';
+        return `
+          <div class="card p-3 mb-2 shadow-sm border-0" style="border-radius: 16px; cursor: pointer; background: white;" onclick="switchCategory('${cat.id}')">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="fw-bold text-dark fs-6"><i class="fa-solid ${cat.icon} me-2 text-primary"></i>${cat.name}領域</div>
+              <span class="badge bg-light text-secondary border rounded-pill px-3">${itemsCount} 個項目 ➔</span>
+            </div>
+            ${catGoal ? `<div class="text-secondary small mt-2 text-truncate" style="opacity:0.9;"><i class="fa-solid fa-bullseye me-1 text-warning"></i>${escapeHtml(catGoal)}</div>` : ''}
+          </div>
+        `;
+      }).join('');
+
+      if (domainCardsHtml) {
+        container.innerHTML += `
+          <div class="px-3 px-lg-0 mb-4">
+            <div class="text-secondary fw-bold mb-3 ps-2"><i class="fa-solid fa-layer-group text-primary me-2"></i>生活領域目標總覽 (點擊切換)</div>
+            ${domainCardsHtml}
+          </div>
+        `;
+      }
+
       let starred = allData.filter(d => d.isStarred && d.type !== 'Goal');
       container.innerHTML += `<div class="px-3 px-lg-0 pb-3"><div class="text-secondary fw-bold mb-3 ps-2"><i class="fa-solid fa-star text-warning me-2"></i>重點關注項目</div><div id="list-home"></div></div>`;
       renderList(document.getElementById('list-home'), starred, false);
