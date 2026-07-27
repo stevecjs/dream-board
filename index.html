@@ -439,29 +439,33 @@
     });
   };
 
-  // Google 登入
+  // Google 登入 (優先使用 Popup 以突破行動端 Safari ITP 跨網域 Cookie 限制)
   function loginWithGoogle(forceRedirect = false) {
     const provider = new firebase.auth.GoogleAuthProvider();
     document.getElementById('loading').style.display = 'flex';
     document.getElementById('loading-text').innerText = "登入驗證中...";
 
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    if (isMobile || forceRedirect) {
+    if (forceRedirect) {
       auth.signInWithRedirect(provider);
-    } else {
-      auth.signInWithPopup(provider).then(async (result) => {
-        if (result && result.credential && result.credential.idToken) {
+      return;
+    }
+
+    auth.signInWithPopup(provider).then(async (result) => {
+      if (result && result.user) {
+        currentUser = result.user;
+        document.getElementById('login-overlay').style.display = 'none';
+        if (result.credential && result.credential.idToken) {
           localStorage.setItem("google_token", result.credential.idToken);
         }
-      }).catch(error => {
-        console.warn("Google Popup 登入遭阻擋或取消，自動切換至 Redirect:", error);
-        if (error.code !== 'auth/popup-closed-by-user') {
-          auth.signInWithRedirect(provider);
-        } else {
-          document.getElementById('loading').style.display = 'none';
-        }
-      });
-    }
+      }
+    }).catch(error => {
+      console.warn("Google Popup 登入遭阻擋，嘗試切換 Redirect:", error);
+      if (error.code === 'auth/popup-blocked' || error.code === 'auth/operation-not-supported-in-this-environment') {
+        auth.signInWithRedirect(provider);
+      } else {
+        document.getElementById('loading').style.display = 'none';
+      }
+    });
   }
 
   // 登出帳號
