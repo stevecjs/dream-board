@@ -222,6 +222,8 @@
     .num-circle-btn {
       width: 32px;
       height: 32px;
+      min-width: 32px;
+      flex-shrink: 0;
       border-radius: 50%;
       border: 1px solid #fcd34d;
       background: #ffffff;
@@ -234,6 +236,7 @@
       cursor: pointer;
       transition: all 0.15s ease;
       user-select: none;
+      padding: 0;
     }
     .num-circle-btn:hover {
       background: #fef3c7;
@@ -250,17 +253,23 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-width: 20px;
-      height: 20px;
-      padding: 0 5px;
+      width: 22px;
+      height: 22px;
+      min-width: 22px;
+      max-width: 22px;
+      flex-shrink: 0;
+      padding: 0;
       border-radius: 50%;
       background: #f59e0b;
       color: #ffffff;
       font-weight: 800;
-      font-size: 0.75rem;
-      margin-left: 5px;
+      font-size: 0.72rem;
+      margin-left: 3px;
+      margin-right: 2px;
       vertical-align: middle;
       box-shadow: 0 1px 3px rgba(245, 158, 11, 0.3);
+      line-height: 1;
+      text-align: center;
     }
   </style>
 </head>
