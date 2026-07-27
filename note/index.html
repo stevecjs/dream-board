@@ -625,6 +625,8 @@
         document.getElementById('loading').style.display = 'none';
       }
     });
+  };
+
   // Google 登入 (優先使用 Popup 以突破行動端 Safari ITP 跨網域 Cookie 限制)
   function loginWithGoogle(forceRedirect = false) {
     const provider = new firebase.auth.GoogleAuthProvider();
