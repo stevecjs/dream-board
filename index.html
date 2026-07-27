@@ -254,16 +254,106 @@
     document.getElementById('btnSave').onclick = saveEdit;
     document.getElementById('btnDelete').onclick = deleteEdit;
 
+    // === 🔒 端對端加密 (E2E AES-256-GCM) 模組 ===
+    let cryptoKey = null;
+
+    async function initCryptoKey(uid) {
+      try {
+        const encoder = new TextEncoder();
+        const keyMaterial = await window.crypto.subtle.importKey(
+          "raw",
+          encoder.encode("HandyDreamSecretSalt_2026_" + uid),
+          { name: "PBKDF2" },
+          false,
+          ["deriveKey"]
+        );
+        cryptoKey = await window.crypto.subtle.deriveKey(
+          {
+            name: "PBKDF2",
+            salt: encoder.encode("Salt_" + uid),
+            iterations: 100000,
+            hash: "SHA-256"
+          },
+          keyMaterial,
+          { name: "AES-GCM", length: 256 },
+          false,
+          ["encrypt", "decrypt"]
+        );
+      } catch (e) {
+        console.error("端對端加密初始化失敗:", e);
+      }
+    }
+
+    async function encryptData(plainText) {
+      if (!plainText || !cryptoKey) return plainText;
+      if (typeof plainText === 'string' && plainText.startsWith('ENC:v1:')) return plainText;
+      
+      try {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(plainText);
+        const iv = window.crypto.getRandomValues(new Uint8Array(12));
+        const encryptedBuffer = await window.crypto.subtle.encrypt(
+          { name: "AES-GCM", iv: iv },
+          cryptoKey,
+          data
+        );
+        
+        const combined = new Uint8Array(iv.length + encryptedBuffer.byteLength);
+        combined.set(iv, 0);
+        combined.set(new Uint8Array(encryptedBuffer), iv.length);
+        
+        let binary = '';
+        const len = combined.byteLength;
+        for (let i = 0; i < len; i++) {
+          binary += String.fromCharCode(combined[i]);
+        }
+        return 'ENC:v1:' + btoa(binary);
+      } catch (e) {
+        console.error("加密過程失敗:", e);
+        return plainText;
+      }
+    }
+
+    async function decryptData(cipherText) {
+      if (!cipherText || !cryptoKey) return cipherText;
+      if (typeof cipherText !== 'string' || !cipherText.startsWith('ENC:v1:')) return cipherText;
+      
+      try {
+        const base64Str = cipherText.slice(7);
+        const binary = atob(base64Str);
+        const combined = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          combined[i] = binary.charCodeAt(i);
+        }
+        
+        const iv = combined.slice(0, 12);
+        const data = combined.slice(12);
+        
+        const decryptedBuffer = await window.crypto.subtle.decrypt(
+          { name: "AES-GCM", iv: iv },
+          cryptoKey,
+          data
+        );
+        
+        return new TextDecoder().decode(decryptedBuffer);
+      } catch (e) {
+        console.error("解密失敗:", e);
+        return "🔒 [無法解密內容]";
+      }
+    }
+
     // 監聽 Firebase Authentication 狀態變更
     auth.onAuthStateChanged(async (user) => {
       if (user) {
         currentUser = user;
+        await initCryptoKey(user.uid);
         document.getElementById('login-overlay').style.display = 'none';
         document.getElementById('user-info-area').style.display = 'block';
         document.getElementById('user-email-text').innerText = user.email || user.displayName || '已登入';
         subscribeToUserData(user.uid);
       } else {
         currentUser = null;
+        cryptoKey = null;
         if (unsubscribeSnapshot) unsubscribeSnapshot();
         document.getElementById('user-info-area').style.display = 'none';
         document.getElementById('login-overlay').style.display = 'flex';
@@ -326,7 +416,7 @@
         if (data && data.items && data.items.length > 0) {
           allData = data.items;
           lastUpdateTimestamp = data.lastUpdated || Date.now();
-          await docRef.set({ items: allData, lastUpdated: lastUpdateTimestamp });
+          await saveToFirestore(allData);
           return true;
         }
       }
@@ -359,7 +449,7 @@
   // 訂閱 Firestore 即時資料變動
   function subscribeToUserData(uid) {
     document.getElementById('loading').style.display = 'flex';
-    document.getElementById('loading-text').innerText = "資料同步中...";
+    document.getElementById('loading-text').innerText = "資料解密同步中...";
     const docRef = getUserDocRef(uid);
     
     if (unsubscribeSnapshot) unsubscribeSnapshot();
@@ -367,7 +457,11 @@
     unsubscribeSnapshot = docRef.onSnapshot(async doc => {
       if (doc.exists) {
         const data = doc.data();
-        allData = data.items || [];
+        const rawItems = data.items || [];
+        allData = await Promise.all(rawItems.map(async item => ({
+          ...item,
+          content: await decryptData(item.content)
+        })));
         lastUpdateTimestamp = data.lastUpdated || Date.now();
       } else {
         // 先嘗試檢查是否有舊版 Apps Script 資料
@@ -379,7 +473,7 @@
         if (!migrated) {
           allData = [...DEFAULT_ITEMS];
           lastUpdateTimestamp = Date.now();
-          docRef.set({ items: allData, lastUpdated: lastUpdateTimestamp });
+          await saveToFirestore(allData);
         }
       }
       renderContent();
@@ -391,14 +485,18 @@
     });
   }
 
-  // 將資料寫入 Firestore
+  // 將資料寫入 Firestore (已加入 E2E 加密)
   async function saveToFirestore(newItems) {
     if (!currentUser) return;
     lastUpdateTimestamp = Date.now();
     allData = newItems;
     try {
+      const encryptedItems = await Promise.all(allData.map(async item => ({
+        ...item,
+        content: await encryptData(item.content)
+      })));
       await getUserDocRef(currentUser.uid).set({
-        items: allData,
+        items: encryptedItems,
         lastUpdated: lastUpdateTimestamp
       }, { merge: true });
     } catch (error) {

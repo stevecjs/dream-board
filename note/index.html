@@ -390,14 +390,104 @@
       document.getElementById('loading').style.display = 'none';
     });
 
-    auth.onAuthStateChanged(user => {
+    // === 🔒 端對端加密 (E2E AES-256-GCM) 模組 ===
+    let cryptoKey = null;
+
+    async function initCryptoKey(uid) {
+      try {
+        const encoder = new TextEncoder();
+        const keyMaterial = await window.crypto.subtle.importKey(
+          "raw",
+          encoder.encode("HandyDreamSecretSalt_2026_" + uid),
+          { name: "PBKDF2" },
+          false,
+          ["deriveKey"]
+        );
+        cryptoKey = await window.crypto.subtle.deriveKey(
+          {
+            name: "PBKDF2",
+            salt: encoder.encode("Salt_" + uid),
+            iterations: 100000,
+            hash: "SHA-256"
+          },
+          keyMaterial,
+          { name: "AES-GCM", length: 256 },
+          false,
+          ["encrypt", "decrypt"]
+        );
+      } catch (e) {
+        console.error("端對端加密初始化失敗:", e);
+      }
+    }
+
+    async function encryptData(plainText) {
+      if (!plainText || !cryptoKey) return plainText;
+      if (typeof plainText === 'string' && plainText.startsWith('ENC:v1:')) return plainText;
+      
+      try {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(plainText);
+        const iv = window.crypto.getRandomValues(new Uint8Array(12));
+        const encryptedBuffer = await window.crypto.subtle.encrypt(
+          { name: "AES-GCM", iv: iv },
+          cryptoKey,
+          data
+        );
+        
+        const combined = new Uint8Array(iv.length + encryptedBuffer.byteLength);
+        combined.set(iv, 0);
+        combined.set(new Uint8Array(encryptedBuffer), iv.length);
+        
+        let binary = '';
+        const len = combined.byteLength;
+        for (let i = 0; i < len; i++) {
+          binary += String.fromCharCode(combined[i]);
+        }
+        return 'ENC:v1:' + btoa(binary);
+      } catch (e) {
+        console.error("加密過程失敗:", e);
+        return plainText;
+      }
+    }
+
+    async function decryptData(cipherText) {
+      if (!cipherText || !cryptoKey) return cipherText;
+      if (typeof cipherText !== 'string' || !cipherText.startsWith('ENC:v1:')) return cipherText;
+      
+      try {
+        const base64Str = cipherText.slice(7);
+        const binary = atob(base64Str);
+        const combined = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          combined[i] = binary.charCodeAt(i);
+        }
+        
+        const iv = combined.slice(0, 12);
+        const data = combined.slice(12);
+        
+        const decryptedBuffer = await window.crypto.subtle.decrypt(
+          { name: "AES-GCM", iv: iv },
+          cryptoKey,
+          data
+        );
+        
+        return new TextDecoder().decode(decryptedBuffer);
+      } catch (e) {
+        console.error("解密失敗:", e);
+        return "🔒 [無法解密內容]";
+      }
+    }
+
+    auth.onAuthStateChanged(async user => {
       if (user) {
         currentUser = user;
+        await initCryptoKey(user.uid);
         document.getElementById('login-overlay').style.display = 'none';
         document.getElementById('user-email-text').innerText = user.email || user.displayName || '已登入';
         subscribeToNotes(user.uid);
       } else {
         currentUser = null;
+        cryptoKey = null;
         if (unsubscribeSnapshot) unsubscribeSnapshot();
         document.getElementById('login-overlay').style.display = 'flex';
         document.getElementById('loading').style.display = 'none';
@@ -445,10 +535,16 @@
     if (unsubscribeSnapshot) unsubscribeSnapshot();
 
     document.getElementById('login-overlay').style.display = 'none';
+    document.getElementById('loading').style.display = 'flex';
+    document.getElementById('loading-text').innerText = "資料解密同步中...";
 
-    unsubscribeSnapshot = docRef.onSnapshot(doc => {
+    unsubscribeSnapshot = docRef.onSnapshot(async doc => {
       if (doc.exists) {
-        allNotes = doc.data().notes || [];
+        const rawNotes = doc.data().notes || [];
+        allNotes = await Promise.all(rawNotes.map(async note => ({
+          ...note,
+          content: await decryptData(note.content)
+        })));
       } else {
         allNotes = [];
         docRef.set({ notes: [] }, { merge: true }).catch(e => {
@@ -469,7 +565,11 @@
   async function saveNotesToFirestore(notes) {
     if (!currentUser) return;
     try {
-      await getUserDocRef(currentUser.uid).set({ notes: notes }, { merge: true });
+      const encryptedNotes = await Promise.all(notes.map(async note => ({
+        ...note,
+        content: await encryptData(note.content)
+      })));
+      await getUserDocRef(currentUser.uid).set({ notes: encryptedNotes }, { merge: true });
     } catch (err) {
       console.error("儲存靈感失敗:", err);
       alert("儲存失敗: " + err.message);
