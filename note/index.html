@@ -601,14 +601,14 @@
         }
       });
       noteInputEl.addEventListener('input', function(e) {
-        handleAutoDetectNumbers(e.target.value, false);
+        scheduleAutoDetectNumbers(e.target.value, false);
       });
     }
 
     const editInputEl = document.getElementById('edit-note-content');
     if (editInputEl) {
       editInputEl.addEventListener('input', function(e) {
-        handleAutoDetectNumbers(e.target.value, true);
+        scheduleAutoDetectNumbers(e.target.value, true);
       });
     }
 
@@ -684,6 +684,23 @@
   let manuallyDeselectedNumbers = new Set();
   let editManuallyDeselectedNumbers = new Set();
 
+  let autoDetectTimer = null;
+  let editAutoDetectTimer = null;
+
+  function scheduleAutoDetectNumbers(text, isEdit = false) {
+    if (!isEdit) {
+      if (autoDetectTimer) clearTimeout(autoDetectTimer);
+      autoDetectTimer = setTimeout(() => {
+        handleAutoDetectNumbers(text, false);
+      }, 450);
+    } else {
+      if (editAutoDetectTimer) clearTimeout(editAutoDetectTimer);
+      editAutoDetectTimer = setTimeout(() => {
+        handleAutoDetectNumbers(text, true);
+      }, 450);
+    }
+  }
+
   function extractNumbers1To49(text) {
     if (!text) return [];
     // 匹配 1~49 獨立整數 (包含中文前後文脈絡，如 "7號"、"12點"、"1, 5, 49")
@@ -698,44 +715,54 @@
     if (isEdit && document.getElementById('edit-note-tag').value !== '💡 靈感') return;
 
     const detected = extractNumbers1To49(text);
-    if (detected.length === 0) return;
+    const detectedSet = new Set(detected);
 
     if (!isEdit) {
-      let added = false;
+      // 1. 自動清洗：若先前自動加上的數字在當前文本中已不存在獨立數字 (如 1 繼續打成 13)，清掉舊數字 1
+      selectedNoteNumbers = selectedNoteNumbers.filter(num => {
+        return detectedSet.has(num) || manuallyDeselectedNumbers.has(num);
+      });
+
+      // 2. 自動補上新完成的獨立數字
       detected.forEach(num => {
         if (!manuallyDeselectedNumbers.has(num) && !selectedNoteNumbers.includes(num)) {
           selectedNoteNumbers.push(num);
-          added = true;
         }
       });
-      if (added) {
-        selectedNoteNumbers.sort((a, b) => a - b);
+
+      selectedNoteNumbers.sort((a, b) => a - b);
+
+      if (selectedNoteNumbers.length > 0) {
         const switchEl = document.getElementById('number-toggle-switch');
         if (!switchEl.checked) {
           switchEl.checked = true;
           document.getElementById('number-circles-grid').style.display = 'flex';
           document.getElementById('number-toggle-label').innerText = '開啟';
         }
-        generateNumberCircles('number-circles-grid', selectedNoteNumbers, 'selectNumberCircle');
       }
+      generateNumberCircles('number-circles-grid', selectedNoteNumbers, 'selectNumberCircle');
     } else {
-      let added = false;
+      editSelectedNoteNumbers = editSelectedNoteNumbers.filter(num => {
+        return detectedSet.has(num) || editManuallyDeselectedNumbers.has(num);
+      });
+
       detected.forEach(num => {
         if (!editManuallyDeselectedNumbers.has(num) && !editSelectedNoteNumbers.includes(num)) {
           editSelectedNoteNumbers.push(num);
-          added = true;
         }
       });
-      if (added) {
-        editSelectedNoteNumbers.sort((a, b) => a - b);
+
+      editSelectedNoteNumbers.sort((a, b) => a - b);
+
+      if (editSelectedNoteNumbers.length > 0) {
         const switchEl = document.getElementById('edit-number-toggle-switch');
         if (!switchEl.checked) {
           switchEl.checked = true;
           document.getElementById('edit-number-circles-grid').style.display = 'flex';
           document.getElementById('edit-number-toggle-label').innerText = '開啟';
         }
-        generateNumberCircles('edit-number-circles-grid', editSelectedNoteNumbers, 'selectEditNumberCircle');
       }
+      generateNumberCircles('edit-number-circles-grid', editSelectedNoteNumbers, 'selectEditNumberCircle');
     }
   }
 
