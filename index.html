@@ -742,9 +742,9 @@
         `;
       }
 
-      let starred = allData.filter(d => d.isStarred && d.type !== 'Goal');
+      let starred = allData.filter(d => isTrue(d.isStarred) && d.type !== 'Goal');
       container.innerHTML += `<div class="px-3 px-lg-0 pb-3"><div class="text-secondary fw-bold mb-3 ps-2"><i class="fa-solid fa-star text-warning me-2"></i>重點關注項目</div><div id="list-home"></div></div>`;
-      renderList(document.getElementById('list-home'), starred, false);
+      renderList(document.getElementById('list-home'), starred, false, true);
       
       // --- 在首頁加入底部 Footer (上次更新 + 匯入舊資料 + 清除資料 + 登出) ---
       let diffDays = 0;
@@ -789,10 +789,28 @@
     }
   }
 
-  function renderList(el, items, sortable) {
-    if(!items.length) { el.innerHTML = '<div class="text-center text-muted py-5 opacity-50"><i class="fa-solid fa-inbox fa-3x mb-3"></i><br>暫無項目</div>'; return; }
+  function isTrue(val) {
+    return val === true || val === 'true' || val === 1 || val === '1';
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function renderList(el, items, sortable, showCategoryBadge = false) {
+    if(!items.length) { el.innerHTML = '<div class="text-center text-muted py-5 opacity-50"><i class="fa-solid fa-inbox fa-3x mb-3"></i><br>暫無重點關注項目</div>'; return; }
     
     el.innerHTML = items.map(item => {
+      let starredState = isTrue(item.isStarred);
+      let doneState = isTrue(item.isDone);
+      let catName = DOMAINS.find(c => c.id === item.category)?.name || '';
+
       let daysHtml = '';
       if(item.type === 'Reminder' && item.dateValue) {
         let today = new Date();
@@ -816,12 +834,15 @@
         `;
       }
       return `
-        <div class="card item-row ${item.isDone?'opacity-50':''}" data-id="${item.id}">
+        <div class="card item-row ${doneState?'opacity-50':''}" data-id="${item.id}">
           <div class="item-top-row">
             ${sortable ? '<div class="me-3 text-muted drag-handle" style="cursor:grab;"><i class="fa-solid fa-grip-vertical"></i></div>' : ''}
-            <i class="star-btn fa-${item.isStarred?'solid':'regular'} fa-star ${item.isStarred?'active':''}" onclick="updateField('${item.id}','isStarred',!${item.isStarred})"></i>
-            ${item.type==='Todo'?`<input type="checkbox" class="form-check-input me-3 shadow-sm" style="width: 1.2em; height: 1.2em;" ${item.isDone?'checked':''} onchange="updateField('${item.id}','isDone',this.checked)">`:''}
-            <div class="item-content-text ${item.isDone?'strikethrough':''}">${item.content}</div>
+            <i class="star-btn fa-${starredState?'solid':'regular'} fa-star ${starredState?'active':''}" onclick="toggleStar('${item.id}')"></i>
+            ${item.type==='Todo'?`<input type="checkbox" class="form-check-input me-3 shadow-sm" style="width: 1.2em; height: 1.2em;" ${doneState?'checked':''} onchange="toggleDone('${item.id}', this.checked)">`:''}
+            <div class="item-content-text ${doneState?'strikethrough':''}">
+              ${showCategoryBadge && catName ? `<span class="badge bg-light text-primary border me-2">${catName}</span>` : ''}
+              ${escapeHtml(item.content)}
+            </div>
           </div>
           <div class="item-bottom-row">
              <div>${daysHtml}</div>
@@ -831,6 +852,24 @@
     }).join('');
 
     if(sortable) new Sortable(el, { handle: '.drag-handle', animation: 150, ghostClass: 'bg-light', onEnd: saveOrder });
+  }
+
+  async function toggleStar(id) {
+    let item = allData.find(d => d.id == id);
+    if(item) {
+      item.isStarred = !isTrue(item.isStarred);
+      renderContent();
+      await saveToFirestore(allData);
+    }
+  }
+
+  async function toggleDone(id, checked) {
+    let item = allData.find(d => d.id == id);
+    if(item) {
+      item.isDone = Boolean(checked);
+      renderContent();
+      await saveToFirestore(allData);
+    }
   }
 
   async function saveTopGoal(el) { 
