@@ -206,6 +206,62 @@
       background: #e2e8f0;
       color: #0f172a;
     }
+
+    .number-picker-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      max-height: 150px;
+      overflow-y: auto;
+      padding: 10px;
+      background: #fffdf0;
+      border: 1px solid #fef3c7;
+      border-radius: 14px;
+      margin-top: 8px;
+    }
+    .num-circle-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 1px solid #fcd34d;
+      background: #ffffff;
+      color: #92400e;
+      font-size: 0.85rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+    .num-circle-btn:hover {
+      background: #fef3c7;
+      transform: scale(1.08);
+    }
+    .num-circle-btn.active {
+      background: #f59e0b;
+      color: #ffffff;
+      border-color: #d97706;
+      box-shadow: 0 2px 6px rgba(245, 158, 11, 0.4);
+      transform: scale(1.1);
+    }
+    .num-circle-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 20px;
+      height: 20px;
+      padding: 0 5px;
+      border-radius: 50%;
+      background: #f59e0b;
+      color: #ffffff;
+      font-weight: 800;
+      font-size: 0.75rem;
+      margin-left: 5px;
+      vertical-align: middle;
+      box-shadow: 0 1px 3px rgba(245, 158, 11, 0.3);
+    }
   </style>
 </head>
 <body>
@@ -260,12 +316,24 @@
       <textarea id="note-input" class="form-control note-textarea mb-2" rows="3" placeholder="有什麼新想法或靈感？隨手記下來..."></textarea>
       
       <!-- 標籤選擇區 -->
-      <div class="d-flex flex-wrap align-items-center mb-3 px-2" id="tag-selector">
+      <div class="d-flex flex-wrap align-items-center mb-2 px-2" id="tag-selector">
         <span class="tag-pill active" onclick="selectTag(this, '💡 靈感')">💡 靈感</span>
         <span class="tag-pill" onclick="selectTag(this, '✨ 想法')">✨ 想法</span>
         <span class="tag-pill" onclick="selectTag(this, '💼 工作')">💼 工作</span>
         <span class="tag-pill" onclick="selectTag(this, '🌿 生活')">🌿 生活</span>
         <span class="tag-pill" onclick="selectTag(this, '📌 備忘')">📌 備忘</span>
+      </div>
+
+      <!-- 靈感數字標號 (1-39) 選項區域 -->
+      <div id="number-picker-section" class="mb-3 px-2">
+        <div class="d-flex align-items-center justify-content-between">
+          <small class="fw-bold" style="color: #b45309;"><i class="fa-solid fa-list-ol me-1"></i>附加數字標號 (1~39)</small>
+          <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" role="switch" id="number-toggle-switch" onchange="toggleNumberPicker(this.checked)">
+            <label class="form-check-label small text-muted ms-1" for="number-toggle-switch" id="number-toggle-label">關閉</label>
+          </div>
+        </div>
+        <div id="number-circles-grid" class="number-picker-container" style="display: none;"></div>
       </div>
 
       <div class="d-flex justify-content-between align-items-center pt-2 border-top">
@@ -323,6 +391,18 @@
             <option value="🌿 生活">🌿 生活</option>
             <option value="📌 備忘">📌 備忘</option>
           </select>
+
+          <!-- 編輯靈感數字標號選項 -->
+          <div id="edit-number-picker-section" class="mb-3" style="display: none;">
+            <div class="d-flex align-items-center justify-content-between mb-1">
+              <label class="form-label text-warning-emphasis small fw-bold mb-0"><i class="fa-solid fa-list-ol me-1"></i>附加數字標號 (1~39)</label>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" role="switch" id="edit-number-toggle-switch" onchange="toggleEditNumberPicker(this.checked)">
+                <label class="form-check-label small text-muted ms-1" for="edit-number-toggle-switch" id="edit-number-toggle-label">關閉</label>
+              </div>
+            </div>
+            <div id="edit-number-circles-grid" class="number-picker-container" style="display: none;"></div>
+          </div>
 
           <label class="form-label text-muted small fw-bold mb-1"><i class="fa-regular fa-clock me-1"></i>紀錄時間 (可自行修改)</label>
           <input type="datetime-local" class="form-control border-0 bg-light shadow-sm" id="edit-note-datetime" style="border-radius: 10px;">
@@ -573,14 +653,85 @@
     });
   }
 
-  function logout() {
-    if (confirm("確定要登出帳號嗎？")) auth.signOut();
+  let selectedNoteNumber = null;
+  let editSelectedNoteNumber = null;
+
+  function generateNumberCircles(containerId, activeNum, selectFuncName) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    let html = '';
+    for (let i = 1; i <= 39; i++) {
+      const isActive = (i === activeNum);
+      html += `<div class="num-circle-btn ${isActive ? 'active' : ''}" onclick="${selectFuncName}(${i})">${i}</div>`;
+    }
+    container.innerHTML = html;
   }
 
   function selectTag(el, tag) {
     document.querySelectorAll('#tag-selector .tag-pill').forEach(pill => pill.classList.remove('active'));
     el.classList.add('active');
     currentSelectedTag = tag;
+
+    const numSection = document.getElementById('number-picker-section');
+    if (tag === '💡 靈感') {
+      numSection.style.display = 'block';
+    } else {
+      numSection.style.display = 'none';
+      document.getElementById('number-toggle-switch').checked = false;
+      toggleNumberPicker(false);
+    }
+  }
+
+  function toggleNumberPicker(enabled) {
+    const grid = document.getElementById('number-circles-grid');
+    const label = document.getElementById('number-toggle-label');
+    if (enabled) {
+      grid.style.display = 'flex';
+      label.innerText = '開啟';
+      if (!selectedNoteNumber) selectedNoteNumber = 1;
+      generateNumberCircles('number-circles-grid', selectedNoteNumber, 'selectNumberCircle');
+    } else {
+      grid.style.display = 'none';
+      label.innerText = '關閉';
+      selectedNoteNumber = null;
+    }
+  }
+
+  function selectNumberCircle(num) {
+    selectedNoteNumber = num;
+    generateNumberCircles('number-circles-grid', selectedNoteNumber, 'selectNumberCircle');
+  }
+
+  function onEditTagChange() {
+    const tag = document.getElementById('edit-note-tag').value;
+    const section = document.getElementById('edit-number-picker-section');
+    if (tag === '💡 靈感') {
+      section.style.display = 'block';
+    } else {
+      section.style.display = 'none';
+      document.getElementById('edit-number-toggle-switch').checked = false;
+      toggleEditNumberPicker(false);
+    }
+  }
+
+  function toggleEditNumberPicker(enabled) {
+    const grid = document.getElementById('edit-number-circles-grid');
+    const label = document.getElementById('edit-number-toggle-label');
+    if (enabled) {
+      grid.style.display = 'flex';
+      label.innerText = '開啟';
+      if (!editSelectedNoteNumber) editSelectedNoteNumber = 1;
+      generateNumberCircles('edit-number-circles-grid', editSelectedNoteNumber, 'selectEditNumberCircle');
+    } else {
+      grid.style.display = 'none';
+      label.innerText = '關閉';
+      editSelectedNoteNumber = null;
+    }
+  }
+
+  function selectEditNumberCircle(num) {
+    editSelectedNoteNumber = num;
+    generateNumberCircles('edit-number-circles-grid', editSelectedNoteNumber, 'selectEditNumberCircle');
   }
 
   function getUserDocRef(uid) {
@@ -650,12 +801,18 @@
       id: 'note_' + Date.now(),
       content: content,
       tag: currentSelectedTag,
+      number: (currentSelectedTag === '💡 靈感' && selectedNoteNumber) ? selectedNoteNumber : null,
       createdAt: now.getTime(),
       isPinned: false
     };
 
     allNotes.unshift(newNote); // 放在最新一筆
     input.value = '';
+
+    // 重置數字標號選擇器
+    document.getElementById('number-toggle-switch').checked = false;
+    toggleNumberPicker(false);
+
     renderNotes();
     await saveNotesToFirestore(allNotes);
   }
@@ -679,12 +836,13 @@
         return false;
       }
 
-      // 文字模糊搜尋（支援文字、標籤或日期格式）
+      // 文字、數字與日期模糊搜尋
       if (query) {
         const matchesContent = n.content.toLowerCase().includes(query);
         const matchesTag = n.tag && n.tag.toLowerCase().includes(query);
+        const matchesNumber = n.number && (String(n.number) === query || ('#' + n.number) === query);
         const matchesDate = dateIso.includes(query) || dateSlash.includes(query) || dateZh.includes(query) || fullZh.includes(query);
-        return matchesContent || matchesTag || matchesDate;
+        return matchesContent || matchesTag || matchesNumber || matchesDate;
       }
 
       return true;
@@ -749,10 +907,19 @@
   }
 
   function createNoteCardHtml(note) {
+    let tagBadgeHtml = `<span class="badge bg-light text-dark border me-2">${escapeHtml(note.tag || '💡 靈感')}</span>`;
+    if (note.tag === '💡 靈感' || !note.tag) {
+      if (note.number) {
+        tagBadgeHtml = `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle fw-bold me-2" style="font-size:0.85rem;">💡 靈感<span class="num-circle-badge">${note.number}</span></span>`;
+      } else {
+        tagBadgeHtml = `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle fw-bold me-2" style="font-size:0.85rem;">💡 靈感</span>`;
+      }
+    }
+
     return `
       <div class="note-card ${note.isPinned ? 'pinned' : ''}">
         <div class="d-flex justify-content-between align-items-center mb-1">
-          <span class="badge bg-light text-dark border me-2">${note.tag || '💡 靈感'}</span>
+          <div>${tagBadgeHtml}</div>
           <span class="note-time-badge"><i class="fa-regular fa-clock me-1"></i>${formatTimeStr(note.createdAt)}</span>
         </div>
         <div class="note-content-text">${escapeHtml(note.content)}</div>
@@ -772,6 +939,7 @@
   }
 
   function escapeHtml(text) {
+    if (!text) return '';
     return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
@@ -809,6 +977,26 @@
     d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
     document.getElementById('edit-note-datetime').value = d.toISOString().slice(0, 16);
 
+    // 處理數字標點狀態
+    const editTagSelect = document.getElementById('edit-note-tag');
+    editTagSelect.onchange = onEditTagChange;
+
+    if (note.tag === '💡 靈感' || !note.tag) {
+      document.getElementById('edit-number-picker-section').style.display = 'block';
+      if (note.number) {
+        document.getElementById('edit-number-toggle-switch').checked = true;
+        editSelectedNoteNumber = note.number;
+        toggleEditNumberPicker(true);
+      } else {
+        document.getElementById('edit-number-toggle-switch').checked = false;
+        toggleEditNumberPicker(false);
+      }
+    } else {
+      document.getElementById('edit-number-picker-section').style.display = 'none';
+      document.getElementById('edit-number-toggle-switch').checked = false;
+      toggleEditNumberPicker(false);
+    }
+
     editModal.show();
   }
 
@@ -828,6 +1016,7 @@
     if (note) {
       note.content = content;
       note.tag = tag;
+      note.number = (tag === '💡 靈感' && editSelectedNoteNumber) ? editSelectedNoteNumber : null;
       if (datetimeVal) {
         note.createdAt = new Date(datetimeVal).getTime();
       }
