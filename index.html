@@ -447,52 +447,109 @@
     return db.collection('users').doc(uid);
   }
 
-  // 從舊版 (Google Apps Script) 遷移資料
+  // 從舊版 (Google Apps Script) 遷移與對接資料 (支援 POST, GET 與 LocalStorage 本機檢測)
+  async function fetchOldApi(token, email) {
+    // 1. 嘗試 POST 請求
+    try {
+      let res = await fetch(OLD_API_URL, {
+        method: 'POST',
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: 'getData', token: token, email: email })
+      });
+      let data = await res.json();
+      if (data) {
+        let items = data.items || data.data || (Array.isArray(data) ? data : null);
+        if (items && items.length > 0) return items;
+      }
+    } catch (e) {
+      console.warn("POST 讀取舊版 API 失敗:", e);
+    }
+
+    // 2. 嘗試 GET 請求 (許多 Google Apps Script 僅回應 GET)
+    try {
+      let url = `${OLD_API_URL}?action=getData&email=${encodeURIComponent(email || '')}&token=${encodeURIComponent(token || '')}`;
+      let res = await fetch(url);
+      let data = await res.json();
+      if (data) {
+        let items = data.items || data.data || (Array.isArray(data) ? data : null);
+        if (items && items.length > 0) return items;
+      }
+    } catch (e) {
+      console.warn("GET 讀取舊版 API 失敗:", e);
+    }
+    return null;
+  }
+
+  function checkLocalStorageBackup() {
+    const keys = ["dream_board_items", "dream_items", "handy_dream_items", "items", "notes", "allData"];
+    for (let k of keys) {
+      try {
+        let val = localStorage.getItem(k);
+        if (val) {
+          let parsed = JSON.parse(val);
+          let items = Array.isArray(parsed) ? parsed : (parsed.items || parsed.notes);
+          if (items && items.length > 0) {
+            return { key: k, items: items };
+          }
+        }
+      } catch(e) {}
+    }
+    return null;
+  }
+
   async function migrateFromOldApi(uid, token, force = false) {
     try {
       const docRef = getUserDocRef(uid);
       const docSnap = await docRef.get();
       const authToken = token || localStorage.getItem("google_token") || "";
-      // 若文件不存在或強制進行匯入
+      const email = currentUser ? currentUser.email : "";
+
       if (!docSnap.exists || force) {
-        let response = await fetch(OLD_API_URL, {
-          method: 'POST',
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify({ action: 'getData', token: authToken, email: currentUser ? currentUser.email : '' })
-        });
-        const data = await response.json();
-        if (data && data.items && data.items.length > 0) {
-          allData = data.items;
-          lastUpdateTimestamp = data.lastUpdated || Date.now();
+        // 1. 嘗試從舊版 Apps Script API 讀取
+        let fetchedItems = await fetchOldApi(authToken, email);
+        if (fetchedItems && fetchedItems.length > 0) {
+          allData = fetchedItems;
+          lastUpdateTimestamp = Date.now();
           await saveToFirestore(allData);
           renderContent();
-          return true;
+          return { success: true, count: fetchedItems.length, source: "Google Apps Script" };
+        }
+
+        // 2. 嘗試從本機 LocalStorage 尋找備份
+        let localBackup = checkLocalStorageBackup();
+        if (localBackup && localBackup.items.length > 0) {
+          allData = localBackup.items;
+          lastUpdateTimestamp = Date.now();
+          await saveToFirestore(allData);
+          renderContent();
+          return { success: true, count: localBackup.items.length, source: "本機快取 (" + localBackup.key + ")" };
         }
       }
     } catch (err) {
       console.warn("無法自動匯入舊版資料:", err);
     }
-    return false;
+    return { success: false };
   }
 
-  // 手動一鍵匯入舊版資料
+  // 手動一鍵匯入舊版資料與診斷
   async function importOldDataManually() {
     if (!currentUser) {
       alert("請先登入帳號後再進行匯入。");
       return;
     }
-    if (!confirm("確定要從舊版 (Google Apps Script API) 載入舊資料並備份儲存至 Firebase 嗎？")) return;
+    if (!confirm("系統將依序從以下管道尋找您歷史儲存的目標資料：\n1. Google Apps Script 舊版資料庫 (POST/GET)\n2. 瀏覽器本機快取 LocalStorage\n\n確定開始掃描並備份至 Firebase 嗎？")) return;
 
     document.getElementById('loading').style.display = 'flex';
-    document.getElementById('loading-text').innerText = "從舊版資料庫匯入中...";
+    document.getElementById('loading-text').innerText = "正在掃描歷史資料庫與備份...";
     const token = localStorage.getItem("google_token") || "";
-    const success = await migrateFromOldApi(currentUser.uid, token, true);
+    const res = await migrateFromOldApi(currentUser.uid, token, true);
     document.getElementById('loading').style.display = 'none';
-    if (success) {
-      alert("成功將舊版資料匯入至 Firebase！");
+
+    if (res.success) {
+      alert(`🎉 成功尋獲並匯入 ${res.count} 筆歷史資料！（來源：${res.source}）`);
       renderContent();
     } else {
-      alert("嘗試讀取舊版資料失敗，請確認舊版資料庫是否有資料。");
+      alert("搜尋完畢：\n未在舊版 Apps Script 伺服器或瀏覽器本機快取中找到歷史資料。\n\n如確定曾有資料，請確認是否使用相同的 Google 帳號 (目前登入：" + (currentUser.email || '未知') + ")。");
     }
   }
 
