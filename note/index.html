@@ -324,10 +324,10 @@
         <span class="tag-pill" onclick="selectTag(this, '📌 備忘')">📌 備忘</span>
       </div>
 
-      <!-- 靈感數字標號 (1-39) 選項區域 -->
+      <!-- 號碼紀錄 (1-49) 選項區域 -->
       <div id="number-picker-section" class="mb-3 px-2">
         <div class="d-flex align-items-center justify-content-between">
-          <small class="fw-bold" style="color: #b45309;"><i class="fa-solid fa-list-ol me-1"></i>附加數字標號 (1~39)</small>
+          <small class="fw-bold" style="color: #b45309;"><i class="fa-solid fa-hashtag me-1"></i>號碼紀錄</small>
           <div class="form-check form-switch mb-0">
             <input class="form-check-input" type="checkbox" role="switch" id="number-toggle-switch" onchange="toggleNumberPicker(this.checked)">
             <label class="form-check-label small text-muted ms-1" for="number-toggle-switch" id="number-toggle-label">關閉</label>
@@ -392,10 +392,10 @@
             <option value="📌 備忘">📌 備忘</option>
           </select>
 
-          <!-- 編輯靈感數字標號選項 -->
+          <!-- 編輯號碼紀錄選項 -->
           <div id="edit-number-picker-section" class="mb-3" style="display: none;">
             <div class="d-flex align-items-center justify-content-between mb-1">
-              <label class="form-label text-warning-emphasis small fw-bold mb-0"><i class="fa-solid fa-list-ol me-1"></i>附加數字標號 (1~39)</label>
+              <label class="form-label text-warning-emphasis small fw-bold mb-0"><i class="fa-solid fa-hashtag me-1"></i>號碼紀錄</label>
               <div class="form-check form-switch mb-0">
                 <input class="form-check-input" type="checkbox" role="switch" id="edit-number-toggle-switch" onchange="toggleEditNumberPicker(this.checked)">
                 <label class="form-check-label small text-muted ms-1" for="edit-number-toggle-switch" id="edit-number-toggle-label">關閉</label>
@@ -627,41 +627,25 @@
     });
   };
 
-  // Google 登入 (優先使用 Popup 以突破行動端 Safari ITP 跨網域 Cookie 限制)
-  function loginWithGoogle(forceRedirect = false) {
-    const provider = new firebase.auth.GoogleAuthProvider();
-    document.getElementById('loading').style.display = 'flex';
-    document.getElementById('loading-text').innerText = "登入驗證中...";
+  // Google 登入 (優  let selectedNoteNumbers = [];
+  let editSelectedNoteNumbers = [];
 
-    if (forceRedirect) {
-      auth.signInWithRedirect(provider);
-      return;
+  function getNoteNumbersArray(note) {
+    if (note && Array.isArray(note.numbers) && note.numbers.length > 0) {
+      return note.numbers;
+    } else if (note && note.number) {
+      return [note.number];
     }
-
-    auth.signInWithPopup(provider).then(result => {
-      if (result && result.user) {
-        currentUser = result.user;
-        document.getElementById('login-overlay').style.display = 'none';
-      }
-    }).catch(err => {
-      console.warn("Google Popup 登入遭阻擋，嘗試切換 Redirect:", err);
-      if (err.code === 'auth/popup-blocked' || err.code === 'auth/operation-not-supported-in-this-environment') {
-        auth.signInWithRedirect(provider);
-      } else {
-        document.getElementById('loading').style.display = 'none';
-      }
-    });
+    return [];
   }
 
-  let selectedNoteNumber = null;
-  let editSelectedNoteNumber = null;
-
-  function generateNumberCircles(containerId, activeNum, selectFuncName) {
+  function generateNumberCircles(containerId, activeNumsArray, selectFuncName) {
     const container = document.getElementById(containerId);
     if (!container) return;
     let html = '';
-    for (let i = 1; i <= 39; i++) {
-      const isActive = (i === activeNum);
+    const activeSet = new Set(activeNumsArray || []);
+    for (let i = 1; i <= 49; i++) {
+      const isActive = activeSet.has(i);
       html += `<div class="num-circle-btn ${isActive ? 'active' : ''}" onclick="${selectFuncName}(${i})">${i}</div>`;
     }
     container.innerHTML = html;
@@ -688,18 +672,25 @@
     if (enabled) {
       grid.style.display = 'flex';
       label.innerText = '開啟';
-      if (!selectedNoteNumber) selectedNoteNumber = 1;
-      generateNumberCircles('number-circles-grid', selectedNoteNumber, 'selectNumberCircle');
+      if (!selectedNoteNumbers) selectedNoteNumbers = [];
+      generateNumberCircles('number-circles-grid', selectedNoteNumbers, 'selectNumberCircle');
     } else {
       grid.style.display = 'none';
       label.innerText = '關閉';
-      selectedNoteNumber = null;
+      selectedNoteNumbers = [];
     }
   }
 
   function selectNumberCircle(num) {
-    selectedNoteNumber = num;
-    generateNumberCircles('number-circles-grid', selectedNoteNumber, 'selectNumberCircle');
+    if (!selectedNoteNumbers) selectedNoteNumbers = [];
+    const idx = selectedNoteNumbers.indexOf(num);
+    if (idx > -1) {
+      selectedNoteNumbers.splice(idx, 1);
+    } else {
+      selectedNoteNumbers.push(num);
+      selectedNoteNumbers.sort((a, b) => a - b);
+    }
+    generateNumberCircles('number-circles-grid', selectedNoteNumbers, 'selectNumberCircle');
   }
 
   function onEditTagChange() {
@@ -720,18 +711,25 @@
     if (enabled) {
       grid.style.display = 'flex';
       label.innerText = '開啟';
-      if (!editSelectedNoteNumber) editSelectedNoteNumber = 1;
-      generateNumberCircles('edit-number-circles-grid', editSelectedNoteNumber, 'selectEditNumberCircle');
+      if (!editSelectedNoteNumbers) editSelectedNoteNumbers = [];
+      generateNumberCircles('edit-number-circles-grid', editSelectedNoteNumbers, 'selectEditNumberCircle');
     } else {
       grid.style.display = 'none';
       label.innerText = '關閉';
-      editSelectedNoteNumber = null;
+      editSelectedNoteNumbers = [];
     }
   }
 
   function selectEditNumberCircle(num) {
-    editSelectedNoteNumber = num;
-    generateNumberCircles('edit-number-circles-grid', editSelectedNoteNumber, 'selectEditNumberCircle');
+    if (!editSelectedNoteNumbers) editSelectedNoteNumbers = [];
+    const idx = editSelectedNoteNumbers.indexOf(num);
+    if (idx > -1) {
+      editSelectedNoteNumbers.splice(idx, 1);
+    } else {
+      editSelectedNoteNumbers.push(num);
+      editSelectedNoteNumbers.sort((a, b) => a - b);
+    }
+    generateNumberCircles('edit-number-circles-grid', editSelectedNoteNumbers, 'selectEditNumberCircle');
   }
 
   function getUserDocRef(uid) {
@@ -796,12 +794,16 @@
       return;
     }
 
+    const numbersToSave = (currentSelectedTag === '💡 靈感' && selectedNoteNumbers && selectedNoteNumbers.length > 0)
+      ? [...selectedNoteNumbers]
+      : null;
+
     const now = new Date();
     const newNote = {
       id: 'note_' + Date.now(),
       content: content,
       tag: currentSelectedTag,
-      number: (currentSelectedTag === '💡 靈感' && selectedNoteNumber) ? selectedNoteNumber : null,
+      numbers: numbersToSave,
       createdAt: now.getTime(),
       isPinned: false
     };
@@ -809,7 +811,7 @@
     allNotes.unshift(newNote); // 放在最新一筆
     input.value = '';
 
-    // 重置數字標號選擇器
+    // 重置號碼紀錄選擇器
     document.getElementById('number-toggle-switch').checked = false;
     toggleNumberPicker(false);
 
@@ -836,11 +838,12 @@
         return false;
       }
 
-      // 文字、數字與日期模糊搜尋
+      // 文字、號碼紀錄與日期模糊搜尋
       if (query) {
         const matchesContent = n.content.toLowerCase().includes(query);
         const matchesTag = n.tag && n.tag.toLowerCase().includes(query);
-        const matchesNumber = n.number && (String(n.number) === query || ('#' + n.number) === query);
+        const nums = getNoteNumbersArray(n);
+        const matchesNumber = nums.some(num => String(num) === query || ('#' + num) === query);
         const matchesDate = dateIso.includes(query) || dateSlash.includes(query) || dateZh.includes(query) || fullZh.includes(query);
         return matchesContent || matchesTag || matchesNumber || matchesDate;
       }
@@ -909,17 +912,20 @@
   function createNoteCardHtml(note) {
     let tagBadgeHtml = `<span class="badge bg-light text-dark border me-2">${escapeHtml(note.tag || '💡 靈感')}</span>`;
     if (note.tag === '💡 靈感' || !note.tag) {
-      if (note.number) {
-        tagBadgeHtml = `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle fw-bold me-2" style="font-size:0.85rem;">💡 靈感<span class="num-circle-badge">${note.number}</span></span>`;
-      } else {
-        tagBadgeHtml = `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle fw-bold me-2" style="font-size:0.85rem;">💡 靈感</span>`;
-      }
+      tagBadgeHtml = `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle fw-bold me-2" style="font-size:0.85rem;">💡 靈感</span>`;
+    }
+
+    const nums = getNoteNumbersArray(note);
+    let numberBadgeHtml = '';
+    if (nums.length > 0) {
+      const numCircles = nums.map(n => `<span class="num-circle-badge">${n}</span>`).join('');
+      numberBadgeHtml = `<span class="badge bg-amber-subtle text-amber border me-2 fw-bold" style="background:#fffbeb; color:#b45309; border: 1px solid #fde68a !important; font-size:0.85rem;">🔢 號碼紀錄 ${numCircles}</span>`;
     }
 
     return `
       <div class="note-card ${note.isPinned ? 'pinned' : ''}">
         <div class="d-flex justify-content-between align-items-center mb-1">
-          <div>${tagBadgeHtml}</div>
+          <div class="d-flex align-items-center flex-wrap gap-1">${tagBadgeHtml}${numberBadgeHtml}</div>
           <span class="note-time-badge"><i class="fa-regular fa-clock me-1"></i>${formatTimeStr(note.createdAt)}</span>
         </div>
         <div class="note-content-text">${escapeHtml(note.content)}</div>
@@ -977,23 +983,26 @@
     d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
     document.getElementById('edit-note-datetime').value = d.toISOString().slice(0, 16);
 
-    // 處理數字標點狀態
+    // 處理號碼紀錄狀態
     const editTagSelect = document.getElementById('edit-note-tag');
     editTagSelect.onchange = onEditTagChange;
 
+    const nums = getNoteNumbersArray(note);
     if (note.tag === '💡 靈感' || !note.tag) {
       document.getElementById('edit-number-picker-section').style.display = 'block';
-      if (note.number) {
+      if (nums.length > 0) {
         document.getElementById('edit-number-toggle-switch').checked = true;
-        editSelectedNoteNumber = note.number;
+        editSelectedNoteNumbers = [...nums];
         toggleEditNumberPicker(true);
       } else {
         document.getElementById('edit-number-toggle-switch').checked = false;
+        editSelectedNoteNumbers = [];
         toggleEditNumberPicker(false);
       }
     } else {
       document.getElementById('edit-number-picker-section').style.display = 'none';
       document.getElementById('edit-number-toggle-switch').checked = false;
+      editSelectedNoteNumbers = [];
       toggleEditNumberPicker(false);
     }
 
@@ -1016,11 +1025,13 @@
     if (note) {
       note.content = content;
       note.tag = tag;
-      note.number = (tag === '💡 靈感' && editSelectedNoteNumber) ? editSelectedNoteNumber : null;
+      note.numbers = (tag === '💡 靈感' && editSelectedNoteNumbers && editSelectedNoteNumbers.length > 0)
+        ? [...editSelectedNoteNumbers]
+        : null;
       if (datetimeVal) {
         note.createdAt = new Date(datetimeVal).getTime();
       }
-      
+
       // 依時間倒序重新排序
       allNotes.sort((a, b) => b.createdAt - a.createdAt);
 
