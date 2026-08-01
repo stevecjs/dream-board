@@ -625,11 +625,17 @@
         subscribeToNotes(result.user.uid);
       }
     }).catch(err => {
-      console.error("Redirect 登入錯誤:", err);
-      if (err.code !== 'auth/popup-closed-by-user') {
-        alert("登入重定向失敗 (" + err.code + "): " + err.message);
+      console.warn("Redirect 登入結果無效或過期 (可忽略):", err);
+      const errStr = (err.code || '') + ' ' + (err.message || '');
+      // 忽略無效動作/過期 redirect 狀態，避免一般載入時誤彈錯誤視窗
+      if (err.code !== 'auth/popup-closed-by-user' && 
+          err.code !== 'auth/invalid-action-code' && 
+          !errStr.includes('invalid') && 
+          !errStr.includes('requested action')) {
+        handleAuthError(err);
+      } else {
+        document.getElementById('loading').style.display = 'none';
       }
-      document.getElementById('loading').style.display = 'none';
     });
 
     auth.onAuthStateChanged(async user => {

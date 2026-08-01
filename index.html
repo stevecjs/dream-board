@@ -409,11 +409,17 @@
         subscribeToUserData(result.user.uid);
       }
     }).catch(err => {
-      console.error("Redirect 登入結果處理錯誤:", err);
-      if (err.code !== 'auth/popup-closed-by-user') {
-        alert("登入驗證失敗: " + err.message);
+      console.warn("Redirect 登入結果無效或過期 (可忽略):", err);
+      const errStr = (err.code || '') + ' ' + (err.message || '');
+      // 忽略無效動作/過期 redirect 狀態，避免一般載入時誤彈錯誤視窗
+      if (err.code !== 'auth/popup-closed-by-user' && 
+          err.code !== 'auth/invalid-action-code' && 
+          !errStr.includes('invalid') && 
+          !errStr.includes('requested action')) {
+        handleAuthError(err);
+      } else {
+        document.getElementById('loading').style.display = 'none';
       }
-      document.getElementById('loading').style.display = 'none';
     });
 
     // 監聽 Firebase Authentication 狀態變更
