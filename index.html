@@ -439,6 +439,20 @@
     });
   };
 
+  function handleAuthError(error) {
+    console.error("Firebase Auth 錯誤:", error);
+    document.getElementById('loading').style.display = 'none';
+
+    const errStr = (error.code || '') + ' ' + (error.message || '');
+    if (errStr.includes('requests-from-referer')) {
+      alert("🚨 Google Cloud API 金鑰來源網站阻擋！\n\n您的 Google Cloud API 金鑰設定了 HTTP 參照網址 (Website restrictions) 限制。\n\n修復方式：\n1. 前往 Google Cloud Console -> APIs & Services -> Credentials\n2. 點擊編輯 Firebase 專案對應的 API Key\n3. 在 Website restrictions (網站限制) 下新增：\n   https://dream.daliuren.cc/*\n   *.daliuren.cc/*");
+    } else if (error.code === 'auth/unauthorized-domain') {
+      alert("🚨 Firebase 授權網域錯誤！\n\n網域 dream.daliuren.cc 尚未加入 Firebase Authentication 授權清單。\n\n請前往 Firebase Console -> Authentication -> Settings -> Authorized Domains，新增網域：dream.daliuren.cc");
+    } else if (error.code !== 'auth/popup-closed-by-user') {
+      alert("Google 登入失敗 (" + (error.code || '未知') + "):\n" + error.message);
+    }
+  }
+
   // Google 登入 (行動版自動使用 Redirect，電腦版 Popup 受阻自動切換 Redirect)
   function loginWithGoogle(forceRedirect = false) {
     const provider = new firebase.auth.GoogleAuthProvider();
@@ -448,11 +462,7 @@
     document.getElementById('loading-text').innerText = "登入驗證中...";
 
     if (isMobile || forceRedirect) {
-      auth.signInWithRedirect(provider).catch(error => {
-        console.error("signInWithRedirect 失敗:", error);
-        alert("Google 登入失敗 (" + error.code + "):\n" + error.message + "\n\n若此網域尚未授權，請至 Firebase Console -> Authentication -> Settings -> Authorized Domains 將 dream.daliuren.cc 新增至已授權網域。");
-        document.getElementById('loading').style.display = 'none';
-      });
+      auth.signInWithRedirect(provider).catch(handleAuthError);
       return;
     }
 
@@ -465,16 +475,12 @@
         }
       }
     }).catch(error => {
-      console.warn("Google Popup 登入異常/遭阻擋，嘗試切換 Redirect:", error);
-      if (error.code === 'auth/unauthorized-domain') {
-        alert("🚨 Firebase 授權網域錯誤！\n\n網域 dream.daliuren.cc 尚未加入 Firebase Authentication 授權清單。\n\n請前往 Firebase Console -> Authentication -> Settings -> Authorized Domains，新增網域：dream.daliuren.cc");
-        document.getElementById('loading').style.display = 'none';
+      console.warn("Google Popup 登入異常/遭阻擋:", error);
+      const errStr = (error.code || '') + ' ' + (error.message || '');
+      if (errStr.includes('requests-from-referer') || error.code === 'auth/unauthorized-domain') {
+        handleAuthError(error);
       } else {
-        auth.signInWithRedirect(provider).catch(err => {
-          console.error("Redirect 降級登入亦失敗:", err);
-          alert("Google 登入失敗 (" + err.code + "):\n" + err.message);
-          document.getElementById('loading').style.display = 'none';
-        });
+        auth.signInWithRedirect(provider).catch(handleAuthError);
       }
     });
   }
